@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:latest
+    container_name: nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: [ "-js" ]
+    restart: unless-stopped
+
+  subpubc:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: registry.gitlab.com/gcoder.ninhph/sub-pub-c:latest
+    container_name: subpubc
+    depends_on:
+      - nats
+    environment:
+      - NATS_URL=nats://nats:4222
+    restart: unless-stopped
+
+  game-test:
+    image: registry.gitlab.com/gcoder.ninhph/simple-war-authoritative:latest
+    container_name: game-test
+    depends_on:
+      - nats
+    environment:
+      - NATS_URL=nats://nats:4222
+    restart: unless-stopped
