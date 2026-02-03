@@ -16,3 +16,6 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 ENTRYPOINT ["dotnet", "SubPubC.dll"]
+
+# docker build -t registry.gitlab.com/gcoder.ninhph/sub-pub-c .
+# docker push registry.gitlab.com/gcoder.ninhph/sub-pub-c

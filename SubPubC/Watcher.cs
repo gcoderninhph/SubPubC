@@ -93,12 +93,14 @@ public class Watcher
     public static void PublishUnitEnter(string watcherId, string[] cellIds)
     {
         string[] units = Cell.GetAllUnityByCellIds(cellIds);
+        if(units.Length == 0) return;
         OnUnitEnter?.Invoke(watcherId, units);
     }
 
     public static void PublishUnitExit(string watcherId, string[] cellIds)
     {
         string[] units = Cell.GetAllUnityByCellIds(cellIds);
+        if(units.Length == 0) return;
         OnUnitExit?.Invoke(watcherId, units);
     }
 

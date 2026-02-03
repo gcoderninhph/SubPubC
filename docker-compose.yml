@@ -11,9 +11,6 @@ services:
     restart: unless-stopped
 
   subpubc:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
     image: registry.gitlab.com/gcoder.ninhph/sub-pub-c:latest
     container_name: subpubc
     depends_on:

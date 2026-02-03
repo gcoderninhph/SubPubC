@@ -43,9 +43,9 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
 
 Dịch vụ sẽ publish ngược lên NATS theo chuẩn:
 
-- `Watcher.{watcherId}.Unit.Enter` – danh sách Unit (dạng chuỗi `id1,id2,...`) vừa vào vùng quan sát.
-- `Watcher.{watcherId}.Unit.Exit` – danh sách Unit vừa rời khỏi vùng quan sát.
-- `Watcher.{watcherId}.Unit.Event.{event_name}` – thông báo Unit gửi event trong vùng quan sát, payload dạng `unitId`.
+- `Watcher.{watcherId}.Unit.Enter` – danh sách Unit vào vùng quan sát dạng chuỗi (`id1,id2,...`).
+- `Watcher.{watcherId}.Unit.Exit` – danh sách Unit rời vùng quan sát dạng chuỗi (`id1,id2,...`).
+- `Watcher.{watcherId}.Unit.Event.{event_name}` – thông báo Unit gửi event trong vùng quan sát dạng chuỗi (`unitId`).
                                                                                     
 """);
 
