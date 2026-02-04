@@ -7,25 +7,14 @@ public class Cell
     /// Key Format "x:y"
     private static DictionaryShard<string, Cell> _cells = new(4);
 
-    private HashSet<string> _watchers = [];
-    private ReaderWriterLockSlim _watchersLock = new();
-
-    private HashSet<string> _units = [];
-    private ReaderWriterLockSlim _unitsLock = new();
+    private HashSetShard<string> _watchers = new(4);
+    private HashSetShard<string> _units = new(4);
 
     public string[] Units
     {
         get
         {
-            _unitsLock.EnterReadLock();
-            try
-            {
-                return [.. _units];
-            }
-            finally
-            {
-                _unitsLock.ExitReadLock();
-            }
+            return _units.ToArray();
         }
     }
 
@@ -33,15 +22,7 @@ public class Cell
     {
         get
         {
-            _watchersLock.EnterReadLock();
-            try
-            {
-                return [.. _watchers];
-            }
-            finally
-            {
-                _watchersLock.ExitReadLock();
-            }
+            return _watchers.ToArray();
         }
     }
 
@@ -56,24 +37,21 @@ public class Cell
         {
             foreach (var watcherId in Watchers)
             {
-                Watcher.PublishUnitEnter(watcherId, [cellId]);
+                Watcher.PublishUnitEnter(watcherId, unitId);
             }
         }
 
         cell.AddUnit(unitId);
     }
 
-    private void AddUnit(string unitId)
+    public void AddUnit(string unitId)
     {
-        _unitsLock.EnterWriteLock();
-        try
-        {
-            _units.Add(unitId);
-        }
-        finally
-        {
-            _unitsLock.ExitWriteLock();
-        }
+        _units.Add(unitId);
+    }
+
+    public void RemoveUnit(string unitId)
+    {
+        _units.Remove(unitId);
     }
 
     public static void PublishMove(string unitId, string oldCellId, string newCellId)
@@ -96,6 +74,9 @@ public class Cell
         {
             Watcher.PublishUnitEnter(watcherId, unitId);
         }
+
+        oldCell.RemoveUnit(unitId);
+        newCell.AddUnit(unitId);
     }
 
 
@@ -104,7 +85,7 @@ public class Cell
         return _cells.TryGetValue(cellId, out var cell) ? cell : null;
     }
 
-    private static Cell Create(string cellId)
+    public static Cell Create(string cellId)
     {
         if (_cells.TryGetValue(cellId, out var cell) && cell != null)
         {
@@ -158,30 +139,14 @@ public class Cell
         }
     }
 
-    private void AddWatcher(string id)
+    public void AddWatcher(string id)
     {
-        _watchersLock.EnterWriteLock();
-        try
-        {
-            _watchers.Add(id);
-        }
-        finally
-        {
-            _watchersLock.ExitWriteLock();
-        }
+        _watchers.Add(id);
     }
 
     private void RemoveWatcher(string id)
     {
-        _watchersLock.EnterWriteLock();
-        try
-        {
-            _watchers.Remove(id);
-        }
-        finally
-        {
-            _watchersLock.ExitWriteLock();
-        }
+        _watchers.Remove(id);
     }
 
 }

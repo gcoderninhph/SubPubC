@@ -9,7 +9,8 @@ public class Unit
 
     public static Unit Enter(string unitId, Vec2 position)
     {
-        Unit? unit = Get(unitId) ?? Create(unitId);
+        Exit(unitId);
+        Unit unit = Create(unitId);
         unit.currentCellId = SubC.GetGridCellByPosition(position);
         Cell.PublishUnitEnter(unitId, unit.currentCellId);
         return unit;
@@ -44,6 +45,12 @@ public class Unit
             {
                 Cell.PublishMove(unitId, unit.currentCellId, newCellId);
             }
+            unit.currentCellId = newCellId;
+        }
+        else
+        {
+            unit.currentCellId = SubC.GetGridCellByPosition(newPosition);
+            Cell.PublishUnitEnter(unitId, unit.currentCellId);
         }
     }
 
@@ -54,8 +61,19 @@ public class Unit
 
         if (unit.currentCellId != string.Empty)
         {
-            Watcher.PublishUnitExit(unitId, [unit.currentCellId]);
+            var cell = Cell.Get(unit.currentCellId);
+            if (cell != null)
+            {
+                foreach (var watcherId in cell.Watchers)
+                {
+                    Watcher.PublishUnitExit(watcherId, unitId);
+                }
+
+                cell.RemoveUnit(unitId);
+            }
         }
+        unit.currentCellId = string.Empty;
+        _units.Remove(unitId);
     }
 
     public static void Event(string unitId, string eventName)

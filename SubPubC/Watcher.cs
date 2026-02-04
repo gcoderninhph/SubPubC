@@ -56,7 +56,13 @@ public class Watcher
 
         string[] gridCells = GetAllGridCellsInRange(position, range);
         watcher.AddCells(gridCells);
-        PublishUnitEnter(watcherId, gridCells);
+        PublishUnitEnterByCells(watcherId, gridCells);
+
+        foreach (var cellId in gridCells)
+        {
+            Cell cell = Cell.Get(cellId) ?? Cell.Create(cellId);
+            cell.AddWatcher(watcherId);
+        }
 
         return watcher;
     }
@@ -71,8 +77,8 @@ public class Watcher
         string[] cellsToAdd = [.. newCells.Except(oldCells)];
         string[] cellsToRemove = [.. oldCells.Except(newCells)];
 
-        PublishUnitEnter(watcherId, cellsToAdd);
-        PublishUnitExit(watcherId, cellsToRemove);
+        PublishUnitEnterByCells(watcherId, cellsToAdd);
+        PublishUnitExitByCells(watcherId, cellsToRemove);
 
         watcher.AddCells(cellsToAdd);
         watcher.RemoveCells(cellsToRemove);
@@ -88,16 +94,19 @@ public class Watcher
         string[] cellIds = watcher.Cells;
         Cell.RemoveWatcherAllCells(watcherId, cellIds);
         _watchers.Remove(watcherId);
+
+        PublishUnitExitByCells(watcherId, cellIds);
+
     }
 
-    public static void PublishUnitEnter(string watcherId, string[] cellIds)
+    public static void PublishUnitEnterByCells(string watcherId, string[] cellIds)
     {
         string[] units = Cell.GetAllUnityByCellIds(cellIds);
         if (units.Length == 0) return;
         OnUnitEnter?.Invoke(watcherId, units);
     }
 
-    public static void PublishUnitExit(string watcherId, string[] cellIds)
+    public static void PublishUnitExitByCells(string watcherId, string[] cellIds)
     {
         string[] units = Cell.GetAllUnityByCellIds(cellIds);
         if (units.Length == 0) return;
