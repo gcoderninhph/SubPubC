@@ -141,7 +141,7 @@ public static class PubSubCConfig
 
         };
 
-        Watcher.OnUnitEvent += (watcherId, eventName, unitId) =>
+        Watcher.OnUnitEvent += (watcherId, unitId, eventName) =>
         {
             try
             {
@@ -169,6 +169,7 @@ public static class PubSubCConfig
 
         unitEnter.Start();
         unitMove.Start();
+        unitEvent.Start();
         unitExit.Start();
         watcherEnter.Start();
         watcherMove.Start();

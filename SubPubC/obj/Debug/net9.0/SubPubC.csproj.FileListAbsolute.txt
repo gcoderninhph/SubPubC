@@ -25,3 +25,4 @@ E:\Ninh\CSharp\SubPubC\SubPubC\bin\Debug\net9.0\Serilog.Sinks.Debug.dll
 E:\Ninh\CSharp\SubPubC\SubPubC\bin\Debug\net9.0\Serilog.Sinks.File.dll
 E:\Ninh\CSharp\SubPubC\SubPubC\obj\Debug\net9.0\SubPubC.csproj.Up2Date
 E:\Ninh\CSharp\SubPubC\SubPubC\obj\Debug\net9.0\SubPubC.genruntimeconfig.cache
+e:\Ninh\CSharp\SubPubC\SubPubC\obj\Debug\net9.0\SubPubC.sourcelink.json

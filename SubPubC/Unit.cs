@@ -70,7 +70,7 @@ public class Unit
 
             foreach (var watcherId in cell.Watchers)
             {
-                Watcher.PublishUnitEvent(unitId, watcherId, eventName);
+                Watcher.PublishUnitEvent(watcherId, unitId, eventName);
             }
         }
     }
