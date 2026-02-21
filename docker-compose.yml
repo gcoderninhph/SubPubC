@@ -19,11 +19,11 @@ services:
       - NATS_URL=nats://nats:4222
     restart: unless-stopped
 
-  game-test:
-    image: registry.gitlab.com/gcoder.ninhph/simple-war-authoritative:latest
-    container_name: game-test
-    depends_on:
-      - nats
-    environment:
-      - NATS_URL=nats://nats:4222
-    restart: unless-stopped
+  # game-test:
+  #   image: registry.gitlab.com/gcoder.ninhph/simple-war-authoritative:latest
+  #   container_name: game-test
+  #   depends_on:
+  #     - nats
+  #   environment:
+  #     - NATS_URL=nats://nats:4222
+  #   restart: unless-stopped

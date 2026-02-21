@@ -25,7 +25,7 @@ public static class PubSubCConfig
         var unitMove = NatsConnection.SubscribeAsync("Unit.Move");
         var unitEvent = NatsConnection.SubscribeAsync("Unit.Event");
         var unitExit = NatsConnection.SubscribeAsync("Unit.Exit");
-        var unitPayload = NatsConnection.SubscribeAsync("Unit.*.Payload");
+        var unitPayload = NatsConnection.SubscribeAsync("Unit.*.Payload.*");
         var watcherEnter = NatsConnection.SubscribeAsync("Watcher.Enter");
         var watcherMove = NatsConnection.SubscribeAsync("Watcher.Move");
         var watcherExit = NatsConnection.SubscribeAsync("Watcher.Exit");
@@ -92,10 +92,11 @@ public static class PubSubCConfig
             {
                 var topic = b.Message.Subject;
                 var parts = topic.Split('.');
-                if (parts.Length != 3) throw new Exception("Invalid Unit.{unitId}.Payload topic");
+                if (parts.Length != 4) throw new Exception("Invalid Unit.{unitId}.Payload.{payloadSubject} topic");
                 var unitId = parts[1];
+                var payloadSubject = parts[3];
                 var payload = b.Message.Data;
-                Unit.Payload(unitId, payload);
+                Unit.Payload(unitId, payload, payloadSubject);
             }
             catch (Exception ex)
             {
@@ -184,15 +185,15 @@ public static class PubSubCConfig
             }
         };
 
-        Watcher.OnUnitPayload += (watcherId, unitId, payload) =>
+        Watcher.OnUnitPayload += (watcherId, unitId, payload, payloadSubject) =>
         {
             try
             {
-                NatsConnection.Publish($"Watcher.{watcherId}.Unit.{unitId}.Payload", payload);
+                NatsConnection.Publish($"Watcher.{watcherId}.Unit.{unitId}.Payload.{payloadSubject}", payload);
             }
             catch (Exception ex)
             {
-                Log.Error($"Error publishing Watcher.{watcherId}.Unit.{unitId}.Payload message: {ex.Message}", ex);
+                Log.Error($"Error publishing Watcher.{watcherId}.Unit.{unitId}.Payload.{payloadSubject} message: {ex.Message}", ex);
             }
         };
 

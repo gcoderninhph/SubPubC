@@ -93,7 +93,7 @@ public class Unit
         }
     }
 
-    public static void Payload(string unitId, byte[] payload)
+    public static void Payload(string unitId, byte[] payload, string payloadSubject)
     {
         Unit? unit = Get(unitId);
         if (unit == null) return;
@@ -105,7 +105,7 @@ public class Unit
 
             foreach (var watcherId in cell.Watchers)
             {
-                Watcher.PublishUnitPayload(watcherId, unitId, payload);
+                Watcher.PublishUnitPayload(watcherId, unitId, payload, payloadSubject);
             }
         }
     }
