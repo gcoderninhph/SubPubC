@@ -27,16 +27,16 @@ Console.WriteLine("""
 
 Dịch vụ đăng ký các chủ đề sau:
 
-| Chủ đề                                | Ý nghĩa                           | Payload ASCII         |
-|---------------------------------------|-----------------------------------|-----------------------|
-| `Unit.Enter`                          | Unit xuất hiện                    | `unitId,x,y`          |
-| `Unit.Move`                           | Unit di chuyển                    | `unitId,x,y`          |
-| `Unit.Event`                          | Unit gửi event                    | `unitId,event_name`   |
-| `Unit.Exit`                           | Unit rời khỏi bản đồ              | `unitId`              |
-| `Unit.{unit_id}.Payload`              | Unit gửi payload                  | `byte[]`              |
-| `Watcher.Enter`                       | Watcher bắt đầu quan sát          | `watcherId,x,y,range` |
-| `Watcher.Move`                        | Watcher di chuyển phạm vi quan sát| `watcherId,x,y,range` |
-| `Watcher.Exit`                        | Watcher dừng quan sát             | `watcherId`           |
+| Chủ đề                                        | Ý nghĩa                           | Payload ASCII         |
+|-----------------------------------------------|-----------------------------------|-----------------------|
+| `Unit.Enter`                                  | Unit xuất hiện                    | `unitId,x,y`          |
+| `Unit.Move`                                   | Unit di chuyển                    | `unitId,x,y`          |
+| `Unit.Event`                                  | Unit gửi event                    | `unitId,event_name`   |
+| `Unit.Exit`                                   | Unit rời khỏi bản đồ              | `unitId`              |
+| `Unit.{unit_id}.Payload.{payload_subject}`    | Unit gửi payload                  | `byte[]`              |
+| `Watcher.Enter`                               | Watcher bắt đầu quan sát          | `watcherId,x,y,range` |
+| `Watcher.Move`                                | Watcher di chuyển phạm vi quan sát| `watcherId,x,y,range` |
+| `Watcher.Exit`                                | Watcher dừng quan sát             | `watcherId`           |
 
 Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nhau dấu phẩy, không có khoảng trắng.
 
@@ -47,7 +47,7 @@ Dịch vụ sẽ publish ngược lên NATS theo chuẩn:
 - `Watcher.{watcherId}.Unit.Enter` – danh sách Unit vào vùng quan sát dạng chuỗi (`id1,id2,...`).
 - `Watcher.{watcherId}.Unit.Exit` – danh sách Unit rời vùng quan sát dạng chuỗi (`id1,id2,...`).
 - `Watcher.{watcherId}.Unit.Event.{event_name}` – thông báo Unit gửi event trong vùng quan sát dạng chuỗi (`unitId`).
-- `Watcher.{watcherId}.Unit.{unitId}.Payload` – payload gốc từ Unit nếu có, dưới dạng `byte[]`.
+- `Watcher.{watcherId}.Unit.{unitId}.Payload.{payload_subject}` – payload gốc từ Unit nếu có, dưới dạng `byte[]`.
                                                                                     
 """);
 
