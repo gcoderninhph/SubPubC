@@ -92,4 +92,21 @@ public class Unit
             }
         }
     }
+
+    public static void Payload(string unitId, byte[] payload)
+    {
+        Unit? unit = Get(unitId);
+        if (unit == null) return;
+
+        if (unit.currentCellId != string.Empty)
+        {
+            Cell? cell = Cell.Get(unit.currentCellId);
+            if (cell == null) return;
+
+            foreach (var watcherId in cell.Watchers)
+            {
+                Watcher.PublishUnitPayload(watcherId, unitId, payload);
+            }
+        }
+    }
 }

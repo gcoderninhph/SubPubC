@@ -27,6 +27,7 @@ Dịch vụ đăng ký các chủ đề sau:
 | `Unit.Move`                           | Unit di chuyển                    | `unitId,x,y`          |
 | `Unit.Event`                          | Unit gửi event                    | `unitId,event_name`   |
 | `Unit.Exit`                           | Unit rời khỏi bản đồ              | `unitId`              |
+| `Unit.{unit_id}.Payload`              | Unit gửi payload                  | `byte[]`              |
 | `Watcher.Enter`                       | Watcher bắt đầu quan sát          | `watcherId,x,y,range` |
 | `Watcher.Move`                        | Watcher di chuyển phạm vi quan sát| `watcherId,x,y,range` |
 | `Watcher.Exit`                        | Watcher dừng quan sát             | `watcherId`           |
@@ -40,6 +41,7 @@ Dịch vụ sẽ publish ngược lên NATS theo chuẩn:
 - `Watcher.{watcherId}.Unit.Enter` – danh sách Unit vào vùng quan sát dạng chuỗi (`id1,id2,...`).
 - `Watcher.{watcherId}.Unit.Exit` – danh sách Unit rời vùng quan sát dạng chuỗi (`id1,id2,...`).
 - `Watcher.{watcherId}.Unit.Event.{event_name}` – thông báo Unit gửi event trong vùng quan sát dạng chuỗi (`unitId`).
+- `Watcher.{watcherId}.Unit.{unitId}.Payload` – payload gốc từ Unit nếu có, dưới dạng `byte[]`.
 
 Bạn chỉ cần subscribe vào các chủ đề trên để nhận kết quả.
 

@@ -25,6 +25,7 @@ public static class PubSubCConfig
         var unitMove = NatsConnection.SubscribeAsync("Unit.Move");
         var unitEvent = NatsConnection.SubscribeAsync("Unit.Event");
         var unitExit = NatsConnection.SubscribeAsync("Unit.Exit");
+        var unitPayload = NatsConnection.SubscribeAsync("Unit.*.Payload");
         var watcherEnter = NatsConnection.SubscribeAsync("Watcher.Enter");
         var watcherMove = NatsConnection.SubscribeAsync("Watcher.Move");
         var watcherExit = NatsConnection.SubscribeAsync("Watcher.Exit");
@@ -82,6 +83,23 @@ public static class PubSubCConfig
             catch (Exception ex)
             {
                 Log.Error($"Error processing Unit.Leave message: {ex.Message}", ex);
+            }
+        };
+
+        unitPayload.MessageHandler += (a, b) =>
+        {
+            try
+            {
+                var topic = b.Message.Subject;
+                var parts = topic.Split('.');
+                if (parts.Length != 3) throw new Exception("Invalid Unit.{unitId}.Payload topic");
+                var unitId = parts[1];
+                var payload = b.Message.Data;
+                Unit.Payload(unitId, payload);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error processing Unit Payload message: {ex.Message}", ex);
             }
         };
 
@@ -163,6 +181,18 @@ public static class PubSubCConfig
             catch (Exception ex)
             {
                 Log.Error($"Error publishing Watcher.{watcherId}.Unit.Exit message: {ex.Message}", ex);
+            }
+        };
+
+        Watcher.OnUnitPayload += (watcherId, unitId, payload) =>
+        {
+            try
+            {
+                NatsConnection.Publish($"Watcher.{watcherId}.Unit.{unitId}.Payload", payload);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error publishing Watcher.{watcherId}.Unit.{unitId}.Payload message: {ex.Message}", ex);
             }
         };
 

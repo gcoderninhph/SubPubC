@@ -9,6 +9,8 @@ public class Watcher
     public static event Action<string, string[]>? OnUnitEnter;
     public static event Action<string, string[]>? OnUnitExit;
     public static event Action<string, string, string>? OnUnitEvent;
+    // watchId, unitId, payload
+    public static event Action<string, string, byte[]>? OnUnitPayload;
 
     private static DictionaryShard<string, Watcher> _watchers = new(8);
 
@@ -126,6 +128,11 @@ public class Watcher
     public static void PublishUnitEvent(string watcherId, string unitId, string eventName)
     {
         OnUnitEvent?.Invoke(watcherId, unitId, eventName);
+    }
+
+    public static void PublishUnitPayload(string watcherId, string unitId, byte[] payload)
+    {
+        OnUnitPayload?.Invoke(watcherId, unitId, payload);
     }
 
     private void AddCells(IEnumerable<string> cellIds)
