@@ -201,6 +201,7 @@ public static class PubSubCConfig
         unitEnter.Start();
         unitMove.Start();
         unitEvent.Start();
+        unitPayload.Start();
         unitExit.Start();
         watcherEnter.Start();
         watcherMove.Start();

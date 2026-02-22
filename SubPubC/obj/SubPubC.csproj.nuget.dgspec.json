@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "E:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj": {}
+    "e:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj": {}
   },
   "projects": {
-    "E:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj": {
+    "e:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "E:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj",
+        "projectUniqueName": "e:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj",
         "projectName": "SubPubC",
-        "projectPath": "E:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj",
+        "projectPath": "e:\\Ninh\\CSharp\\SubPubC\\SubPubC\\SubPubC.csproj",
         "packagesPath": "C:\\Users\\ADMIN\\.nuget\\packages\\",
-        "outputPath": "E:\\Ninh\\CSharp\\SubPubC\\SubPubC\\obj\\",
+        "outputPath": "e:\\Ninh\\CSharp\\SubPubC\\SubPubC\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Users\\ADMIN\\AppData\\Roaming\\Godot\\mono\\GodotNuGetFallbackFolder"
