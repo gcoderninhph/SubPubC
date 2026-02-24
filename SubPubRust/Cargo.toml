@@ -1,0 +1,22 @@
+[package]
+name = "sub-pub-rust"
+version = "0.1.0"
+edition = "2021"
+description = "Spatial Pub/Sub service using NATS - Rust implementation"
+
+[dependencies]
+async-nats = "0.38"
+tokio = { version = "1", features = ["full"] }
+dashmap = "6"
+parking_lot = "0.12"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bytes = "1"
+futures = "0.3"
+anyhow = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+strip = true
