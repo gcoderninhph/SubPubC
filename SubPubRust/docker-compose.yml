@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: registry.gitlab.com/gcoder.ninhph/sub-pub-rust:latest
+    image: registry.gitlab.com/gcoder.ninhph/sub-pub-c:rust-version
     container_name: subpubrust
     depends_on:
       - nats
