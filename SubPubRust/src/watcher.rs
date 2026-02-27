@@ -107,6 +107,8 @@ pub fn exit(watcher_id: &str) {
     publish_unit_exit_by_cells(watcher_id, &cell_ids);
 }
 
+/// Ping: compare client-side unit list against server-side truth.
+/// Missing units → Watcher.{id}.Unit.Enter, extra units → Watcher.{id}.Unit.Exit.
 pub fn ping_unit(watcher_id: &str, client_unit_ids: &[&str]) {
     let watcher = match get(watcher_id) {
         Some(w) => w,
@@ -117,21 +119,20 @@ pub fn ping_unit(watcher_id: &str, client_unit_ids: &[&str]) {
     let server_units: HashSet<String> = cell::get_all_units_by_cells(&cell_ids)
         .into_iter()
         .collect();
-
     let client_units: HashSet<&str> = client_unit_ids.iter().copied().collect();
 
-    // Units server có mà client chưa có → Enter
+    // Units on server but not on client → need to enter
     let missing: Vec<String> = server_units
         .iter()
         .filter(|u| !client_units.contains(u.as_str()))
         .cloned()
         .collect();
 
-    // Units client có mà server không có → Exit
+    // Units on client but not on server → need to exit
     let extra: Vec<String> = client_units
         .iter()
-        .filter(|&&u| !server_units.contains(u))   // ← Pattern &&u để u là &str
-        .map(|&u| u.to_string())
+        .filter(|u| !server_units.contains(**u))
+        .map(|u| u.to_string())
         .collect();
 
     if !missing.is_empty() {
