@@ -37,11 +37,12 @@ Dịch vụ Pub/Sub không gian (spatial) hiệu năng cao, viết bằng Rust. 
 | `Unit.Move` | Unit di chuyển | `unitId,x,y` |
 | `Unit.Event` | Unit gửi event | `unitId,event_name` |
 | `Unit.Exit` | Unit rời bản đồ | `unitId` |
-| `Unit.{unit_id}.Payload.{payload_subject}` | Unit gửi payload | `byte[]` |
+| `Unit.<unit_id>.Payload.<payload_subject>` | Unit gửi payload | `byte[]` |
+| `Unit.Ping` | ping các unit (Expired : 10s) | `unitId1,unitId2,...` |
 | `Watcher.Enter` | Watcher bắt đầu quan sát | `watcherId,x,y,range` |
 | `Watcher.Move` | Watcher di chuyển vùng quan sát | `watcherId,x,y,range` |
 | `Watcher.Exit` | Watcher dừng quan sát | `watcherId` |
-| `Watcher.{watcherId}.PingUnit` | ping toàn bộ unit | `unitId1,unitId2,...` |
+| `Watcher.<watcherId>.PingUnit` | ping toàn bộ unit | `unitId1,unitId2,...` |
 
 Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nhau dấu phẩy, không có khoảng trắng.
 
@@ -49,10 +50,11 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
 
 | Chủ đề | Ý nghĩa | Payload |
 |---|---|---|
-| `Watcher.{watcherId}.Unit.Enter` | Unit vào vùng quan sát | `id1,id2,...` |
-| `Watcher.{watcherId}.Unit.Exit` | Unit rời vùng quan sát | `id1,id2,...` |
-| `Watcher.{watcherId}.Unit.Event.{event_name}` | Unit event trong vùng | `unitId` |
-| `Watcher.{watcherId}.Unit.{unitId}.Payload.{payload_subject}` | Payload từ Unit | `byte[]` |
+| `Watcher.<watcherId>.Unit.Enter` | Unit vào vùng quan sát | `id1,id2,...` |
+| `Watcher.<watcherId>.Unit.Exit` | Unit rời vùng quan sát | `id1,id2,...` |
+| `Watcher.<watcherId>.Unit.Event.<event_name>` | Unit event trong vùng | `unitId` |
+| `Watcher.<watcherId>.Unit.<unitId>.Payload.<payload_subject>` | Payload từ Unit | `byte[]` |
+| `Provider.Unit.Enter` | Thông tin các unit cần cung cấp Unit.Enter | `unitId1,unitId2,...` |
 
 ## Cấu hình
 

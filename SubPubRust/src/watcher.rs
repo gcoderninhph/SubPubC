@@ -72,8 +72,12 @@ pub fn enter(watcher_id: &str, position: Vec2, range: f32) {
 }
 
 /// Watcher moves its observation to `new_position` / `range`.
+/// **Ignored** if the watcher has not called `enter()` first.
 pub fn mov(watcher_id: &str, new_position: Vec2, range: f32) {
-    let watcher = get_or_create(watcher_id);
+    let watcher = match get(watcher_id) {
+        Some(w) => w,
+        None => return, // not entered yet — ignore
+    };
 
     let old_cells = watcher.cells_snapshot();
     let new_cells: HashSet<CellId> = grid::get_cells_in_range(new_position, range)

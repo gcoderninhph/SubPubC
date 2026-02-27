@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
  \____  $$| $$  | $$| $$  \ $$  /$$/   | $$____/ | $$  | $$| $$  \ $$      | $$      
  /$$  \ $$| $$  | $$| $$  | $$ /$$/    | $$      | $$  | $$| $$  | $$      | $$    $$
 |  $$$$$$/|  $$$$$$/| $$$$$$$//$$/     | $$      |  $$$$$$/| $$$$$$$/      |  $$$$$$/
- \______/  \______/ |_______/|__/      |__/       \______/ |_______/        \______/ v.1.0
+ \______/  \______/ |_______/|__/      |__/       \______/ |_______/        \______/ v.1.1
 
 Sub/Pub Rust — Spatial Pub/Sub Service (grid_size={grid_size_val})
 
@@ -70,6 +70,7 @@ Sub/Pub Rust — Spatial Pub/Sub Service (grid_size={grid_size_val})
 | `Unit.Event` | Unit gửi event | `unitId,event_name` |
 | `Unit.Exit` | Unit rời bản đồ | `unitId` |
 | `Unit.<unit_id>.Payload.<payload_subject>` | Unit gửi payload | `byte[]` |
+| `Unit.Ping` | ping các unit (Expired : 10s) | `unitId1,unitId2,...` |
 | `Watcher.Enter` | Watcher bắt đầu quan sát | `watcherId,x,y,range` |
 | `Watcher.Move` | Watcher di chuyển vùng quan sát | `watcherId,x,y,range` |
 | `Watcher.Exit` | Watcher dừng quan sát | `watcherId` |
@@ -85,6 +86,7 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
 | `Watcher.<watcherId>.Unit.Exit` | Unit rời vùng quan sát | `id1,id2,...` |
 | `Watcher.<watcherId>.Unit.Event.<event_name>` | Unit event trong vùng | `unitId` |
 | `Watcher.<watcherId>.Unit.<unitId>.Payload.<payload_subject>` | Payload từ Unit | `byte[]` |
+| `Provider.Unit.Enter` | Thông tin các unit cần cung cấp Unit.Enter | `unitId1,unitId2,...` |
 "#
     );
 
@@ -102,6 +104,7 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
     let sub_unit_event = client.subscribe("Unit.Event").await?;
     let sub_unit_exit = client.subscribe("Unit.Exit").await?;
     let sub_unit_payload = client.subscribe("Unit.*.Payload.*").await?;
+    let sub_unit_ping = client.subscribe("Unit.Ping").await?;
     let sub_watcher_enter = client.subscribe("Watcher.Enter").await?;
     let sub_watcher_move = client.subscribe("Watcher.Move").await?;
     let sub_watcher_exit = client.subscribe("Watcher.Exit").await?;
@@ -115,6 +118,8 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
     tokio::spawn(handle_unit_event(sub_unit_event));
     tokio::spawn(handle_unit_exit(sub_unit_exit));
     tokio::spawn(handle_unit_payload(sub_unit_payload));
+    tokio::spawn(handle_unit_ping(sub_unit_ping));
+    tokio::spawn(unit_expiry_checker());
     tokio::spawn(handle_watcher_enter(sub_watcher_enter));
     tokio::spawn(handle_watcher_move(sub_watcher_move));
     tokio::spawn(handle_watcher_exit(sub_watcher_exit));
@@ -181,6 +186,39 @@ async fn handle_unit_payload(mut sub: async_nats::Subscriber) {
         } else {
             error!("Invalid Unit.*.Payload.* topic: {}", msg.subject);
         }
+    }
+}
+
+async fn handle_unit_ping(mut sub: async_nats::Subscriber) {
+    while let Some(msg) = sub.next().await {
+        match std::str::from_utf8(&msg.payload) {
+            Ok(s) => {
+                if s.is_empty() {
+                    continue;
+                }
+                let unit_ids: Vec<&str> = s.split(',').collect();
+                let missing = unit::ping(&unit_ids);
+                if !missing.is_empty() {
+                    // Ask providers to send Unit.Enter for these units
+                    let payload = missing.join(",");
+                    info!("Provider.Unit.Enter requested for: {}", payload);
+                    nats_publish(
+                        "Provider.Unit.Enter".to_string(),
+                        Bytes::from(payload),
+                    );
+                }
+            }
+            Err(e) => error!("Error processing Unit.Ping: {}", e),
+        }
+    }
+}
+
+/// Background task: every 5 seconds, sweep expired units.
+async fn unit_expiry_checker() {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+    loop {
+        interval.tick().await;
+        unit::check_expired();
     }
 }
 

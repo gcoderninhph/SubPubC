@@ -1,8 +1,10 @@
 use std::sync::{Arc, LazyLock};
+use std::time::Instant;
 
 use bytes::Bytes;
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use tracing::info;
 
 use crate::cell;
 use crate::grid::{self, CellId, Vec2};
@@ -11,17 +13,21 @@ use crate::watcher;
 // ── Global unit storage ──────────────────────────────────────────────
 static UNITS: LazyLock<DashMap<String, Arc<Unit>>> = LazyLock::new(DashMap::new);
 
+/// Expiry duration for unit ping (10 seconds).
+const PING_EXPIRY: std::time::Duration = std::time::Duration::from_secs(10);
+
 struct Unit {
     /// Current cell; `None` means the unit has no position yet.
-    /// Mutex is used instead of RwLock because writes are the common case
-    /// and the critical section is tiny (just a copy of an Option<(i32,i32)>).
     current_cell_id: Mutex<Option<CellId>>,
+    /// Last time this unit was pinged. Updated on enter() and ping().
+    last_ping: Mutex<Instant>,
 }
 
 impl Unit {
     fn new() -> Self {
         Self {
             current_cell_id: Mutex::new(None),
+            last_ping: Mutex::new(Instant::now()),
         }
     }
 }
@@ -50,13 +56,18 @@ pub fn enter(unit_id: &str, position: Vec2) {
     let unit = get_or_create(unit_id);
     let cell_id = grid::get_cell(position);
     *unit.current_cell_id.lock() = Some(cell_id);
+    *unit.last_ping.lock() = Instant::now();
     cell::publish_unit_enter(unit_id, cell_id);
 }
 
 /// Unit moves to `new_position`. If it crosses a cell boundary, watchers
 /// are notified of enter/exit.
+/// **Ignored** if the unit has not called `enter()` first.
 pub fn mov(unit_id: &str, new_position: Vec2) {
-    let unit = get_or_create(unit_id);
+    let unit = match get(unit_id) {
+        Some(u) => u,
+        None => return, // not entered yet — ignore
+    };
 
     // Read current cell (fast copy, then drop the lock)
     let current = *unit.current_cell_id.lock();
@@ -70,9 +81,8 @@ pub fn mov(unit_id: &str, new_position: Vec2) {
             }
         }
         None => {
-            let cell_id = grid::get_cell(new_position);
-            cell::publish_unit_enter(unit_id, cell_id);
-            *unit.current_cell_id.lock() = Some(cell_id);
+            // Unit exists but has no cell yet (shouldn't happen after enter),
+            // ignore to avoid accidental publish_unit_enter from Move.
         }
     }
 }
@@ -114,6 +124,39 @@ pub fn event(unit_id: &str, event_name: &str) {
         for watcher_id in &watchers {
             watcher::publish_unit_event(watcher_id, unit_id, event_name);
         }
+    }
+}
+
+/// Handle `Unit.Ping` — refresh last-ping for known units,
+/// return list of unknown unit IDs that need `Provider.Unit.Enter`.
+pub fn ping(unit_ids: &[&str]) -> Vec<String> {
+    let mut missing = Vec::new();
+    for &uid in unit_ids {
+        match get(uid) {
+            Some(unit) => {
+                *unit.last_ping.lock() = Instant::now();
+            }
+            None => {
+                missing.push(uid.to_string());
+            }
+        }
+    }
+    missing
+}
+
+/// Check all units for ping expiry. Units that haven't been pinged
+/// within `PING_EXPIRY` are removed via `exit()`.
+pub fn check_expired() {
+    let now = Instant::now();
+    let expired: Vec<String> = UNITS
+        .iter()
+        .filter(|entry| now.duration_since(*entry.value().last_ping.lock()) > PING_EXPIRY)
+        .map(|entry| entry.key().clone())
+        .collect();
+
+    for uid in &expired {
+        info!("Unit {} expired (no ping for {:?}), removing", uid, PING_EXPIRY);
+        exit(uid);
     }
 }
 
