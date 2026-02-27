@@ -119,20 +119,24 @@ pub fn ping_unit(watcher_id: &str, client_unit_ids: &[&str]) {
     let server_units: HashSet<String> = cell::get_all_units_by_cells(&cell_ids)
         .into_iter()
         .collect();
-    let client_units: HashSet<&str> = client_unit_ids.iter().copied().collect();
 
-    // Units on server but not on client → need to enter
+    let client_units: HashSet<String> = client_unit_ids
+        .iter()
+        .map(|&s| s.to_string())
+        .collect();
+
+    // Units server có mà client chưa có → Enter
     let missing: Vec<String> = server_units
         .iter()
-        .filter(|u| !client_units.contains(u.as_str()))
+        .filter(|u| !client_units.contains(u.as_str()))   // ← DÙNG .as_str()
         .cloned()
         .collect();
 
-    // Units on client but not on server → need to exit
+    // Units client có mà server không có → Exit
     let extra: Vec<String> = client_units
         .iter()
-        .filter(|u| !server_units.contains(**u))
-        .map(|u| u.to_string())
+        .filter(|u| !server_units.contains(u.as_str()))   // ← DÙNG .as_str()
+        .cloned()
         .collect();
 
     if !missing.is_empty() {
