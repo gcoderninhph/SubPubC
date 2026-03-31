@@ -199,13 +199,16 @@ async fn handle_unit_ping(mut sub: async_nats::Subscriber) {
                 let unit_ids: Vec<&str> = s.split(',').collect();
                 let missing = unit::ping(&unit_ids);
                 if !missing.is_empty() {
-                    // Ask providers to send Unit.Enter for these units
-                    let payload = missing.join(",");
-                    info!("Provider.Unit.Enter requested for: {}", payload);
-                    nats_publish(
-                        "Provider.Unit.Enter".to_string(),
-                        Bytes::from(payload),
-                    );
+                    // Ask providers to send Unit.Enter for missing units in chunks.
+                    const MAX_UNIT_IDS_PER_PAYLOAD: usize = 100;
+                    for chunk in missing.chunks(MAX_UNIT_IDS_PER_PAYLOAD) {
+                        let payload = chunk.join(",");
+                        info!("Provider.Unit.Enter requested for: {}", payload);
+                        nats_publish(
+                            "Provider.Unit.Enter".to_string(),
+                            Bytes::from(payload),
+                        );
+                    }
                 }
             }
             Err(e) => error!("Error processing Unit.Ping: {}", e),
