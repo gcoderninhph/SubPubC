@@ -32,10 +32,10 @@ public class PubSubNatifyIntegrationTests : IDisposable
     private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
 
     [Fact]
-    public void SendAddWatcher_UnitInRange_ReceivesSyncEnter()
+    public async Task SendAddWatcher_UnitInRange_ReceivesSyncEnter()
     {
         var player = new Player();
-        var unit = _pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
+        var unit = await _pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player);
 
         var signal = new ManualResetEventSlim();
         SyncEnterMsg? received = null;
@@ -58,10 +58,10 @@ public class PubSubNatifyIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void ServerAddUnit_InWatcherRange_ReceivesBatchEnter()
+    public async Task ServerAddUnit_InWatcherRange_ReceivesBatchEnter()
     {
         _pubSub.AddWatcher(300, V(0, 0), 200f);
-        Thread.Sleep(300);
+        await _pubSub.FlushAsync();
 
         var signal = new ManualResetEventSlim();
         BatchEnterMsg? received = null;
@@ -72,7 +72,7 @@ public class PubSubNatifyIntegrationTests : IDisposable
         });
 
         var player = new Player();
-        var unit = _pubSub.CreateUnit<Player>(3, "item", V(50, 50), player);
+        var unit = await _pubSub.CreateUnitAsync<Player>(3, "item", V(50, 50), player);
 
         Assert.True(signal.Wait(5000), "Timeout waiting for BatchEnter");
         Assert.NotNull(received);
@@ -81,12 +81,13 @@ public class PubSubNatifyIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void SendPublishEvent_ReceivesUnitEvent()
+    public async Task SendPublishEvent_ReceivesUnitEvent()
     {
         _pubSub.AddWatcher(400, V(0, 0), 200f);
         var player = new Player();
-        var unit = _pubSub.CreateUnit<Player>(4, "hero", V(50, 50), player);
-        Thread.Sleep(300);
+        var unit = await _pubSub.CreateUnitAsync<Player>(4, "hero", V(50, 50), player);
+        await _pubSub.FlushAsync();
+        await Task.Delay(100);
 
         var signal = new ManualResetEventSlim();
         UnitEventMsg? received = null;

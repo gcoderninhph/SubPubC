@@ -27,7 +27,7 @@ public class PubSubTests
     // ===== BatchEnter / BatchLeave =====
 
     [Fact]
-    public void AddUnit_InRange_BatchEnter()
+    public async Task AddUnit_InRange_BatchEnter()
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -46,7 +46,7 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player { Name = "A" };
-            var u = pubSub.CreateUnit<Player>(42, "hero", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(42, "hero", V(50, 50), player);
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -60,7 +60,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void AddUnit_OutOfRange_NoEvent()
+    public async Task AddUnit_OutOfRange_NoEvent()
     {
         var signal = new ManualResetEventSlim();
 
@@ -72,7 +72,7 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 10);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(1, "hero", V(200, 200), player);
+            var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(200, 200), player);
 
             Assert.False(signal.Wait(1000));
         }
@@ -80,7 +80,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void RemoveUnit_InRange_BatchLeave()
+    public async Task RemoveUnit_InRange_BatchLeave()
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -99,8 +99,9 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(99, "npc", V(30, 30), player);
+            var u = await pubSub.CreateUnitAsync<Player>(99, "npc", V(30, 30), player);
             u.Destroy();
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -114,7 +115,7 @@ public class PubSubTests
     // ===== SyncEnter / SyncLeave =====
 
     [Fact]
-    public void AddWatcher_ExistingUnit_SyncEnter()
+    public async Task AddWatcher_ExistingUnit_SyncEnter()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -124,7 +125,7 @@ public class PubSubTests
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(7, "mob", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(7, "mob", V(50, 50), player);
 
             Action<(long, List<IUnit<Player>>)> cb = tuple =>
             {
@@ -135,6 +136,7 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -147,7 +149,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void RemoveWatcher_ExistingUnit_SyncLeave()
+    public async Task RemoveWatcher_ExistingUnit_SyncLeave()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -166,8 +168,9 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(5, "item", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(5, "item", V(50, 50), player);
             pubSub.RemoveWatcher(1);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -182,7 +185,7 @@ public class PubSubTests
     // ===== MoveWatcher =====
 
     [Fact]
-    public void MoveWatcher_IntoRange_SyncEnter()
+    public async Task MoveWatcher_IntoRange_SyncEnter()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -192,10 +195,10 @@ public class PubSubTests
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(10, "hero", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(10, "hero", V(50, 50), player);
 
             pubSub.AddWatcher(1, V(500, 500), 50);
-            Thread.Sleep(100);
+            await pubSub.FlushAsync();
 
             Action<(long, List<IUnit<Player>>)> cb = tuple =>
             {
@@ -206,6 +209,7 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             pubSub.MoveWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -217,7 +221,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void MoveWatcher_OutOfRange_SyncLeave()
+    public async Task MoveWatcher_OutOfRange_SyncLeave()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -236,10 +240,10 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(20, "mob", V(50, 50), player);
-            signal.Reset();
+            var u = await pubSub.CreateUnitAsync<Player>(20, "mob", V(50, 50), player);
 
             pubSub.MoveWatcher(1, V(500, 500), 50);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -253,7 +257,7 @@ public class PubSubTests
     // ===== Position change (Unit moves) =====
 
     [Fact]
-    public void UnitChangeCell_OutOfRange_BatchLeave()
+    public async Task UnitChangeCell_OutOfRange_BatchLeave()
     {
         var leaveSignal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -263,8 +267,7 @@ public class PubSubTests
         {
             pubSub.AddWatcher(1, V(0, 0), 80);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
-            Thread.Sleep(100);
+            var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
             {
@@ -274,6 +277,7 @@ public class PubSubTests
             pubSub.OnUnitLeave(cb);
 
             u.Position = V(200, 200);
+            await pubSub.FlushAsync();
 
             Assert.True(leaveSignal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -283,7 +287,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void UnitChangeCell_StillInRange_NoEvent()
+    public async Task UnitChangeCell_StillInRange_NoEvent()
     {
         var enterSignal = new ManualResetEventSlim();
         var leaveSignal = new ManualResetEventSlim();
@@ -293,8 +297,7 @@ public class PubSubTests
         {
             pubSub.AddWatcher(1, V(0, 0), 300);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
-            Thread.Sleep(100);
+            var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player);
 
             Action<(List<long>, IUnit<Player>)> enterCb = _ => enterSignal.Set();
             Action<(List<long>, IUnit<Player>)> leaveCb = _ => leaveSignal.Set();
@@ -302,6 +305,7 @@ public class PubSubTests
             pubSub.OnUnitLeave(leaveCb);
 
             u.Position = V(150, 150);
+            await pubSub.FlushAsync();
 
             Assert.False(enterSignal.Wait(1000));
             Assert.False(leaveSignal.Wait(1000));
@@ -310,7 +314,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void UnitPosition_IntoRange_BatchEnter()
+    public async Task UnitPosition_IntoRange_BatchEnter()
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -320,8 +324,7 @@ public class PubSubTests
         {
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(3, "npc", V(500, 500), player);
-            Thread.Sleep(100);
+            var u = await pubSub.CreateUnitAsync<Player>(3, "npc", V(500, 500), player);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
             {
@@ -331,6 +334,7 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             u.Position = V(50, 50);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -342,7 +346,7 @@ public class PubSubTests
     // ===== WatcherPingUnits =====
 
     [Fact]
-    public void PingUnits_Missing_SyncEnter()
+    public async Task PingUnits_Missing_SyncEnter()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -352,9 +356,9 @@ public class PubSubTests
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(8, "mob", V(50, 50), player);
             pubSub.AddWatcher(1, V(0, 0), 200);
-            Thread.Sleep(100);
+            await pubSub.FlushAsync();
 
             Action<(long, List<IUnit<Player>>)> cb = tuple =>
             {
@@ -365,6 +369,7 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -376,7 +381,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void PingUnits_Extra_SyncLeave()
+    public async Task PingUnits_Extra_SyncLeave()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -386,9 +391,9 @@ public class PubSubTests
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(9, "mob", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(9, "mob", V(50, 50), player);
             pubSub.AddWatcher(1, V(0, 0), 200);
-            Thread.Sleep(100);
+            await pubSub.FlushAsync();
 
             Action<(long, List<UnitKey>)> cb = tuple =>
             {
@@ -400,6 +405,7 @@ public class PubSubTests
 
             var fakeKey = new UnitKey(999, "mob");
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { fakeKey, 0 } });
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -412,13 +418,13 @@ public class PubSubTests
     }
 
     [Fact]
-    public void UnitVersion_IncrementsOnPositionChange()
+    public async Task UnitVersion_IncrementsOnPositionChange()
     {
         var pubSub = CreatePubSub();
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(1, "hero", V(0, 0), player);
+            var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(0, 0), player);
             Assert.Equal(0, u.Version);
 
             u.Position = V(100, 100);
@@ -431,13 +437,13 @@ public class PubSubTests
     }
 
     [Fact]
-    public void UnitVersion_IncrementsOnDataSet()
+    public async Task UnitVersion_IncrementsOnDataSet()
     {
         var pubSub = CreatePubSub();
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(1, "hero", V(0, 0), player);
+            var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(0, 0), player);
             Assert.Equal(0, u.Version);
 
             u.Data = new byte[] { 1 };
@@ -450,7 +456,7 @@ public class PubSubTests
     }
 
     [Fact]
-    public void PingUnits_VersionMismatch_SyncEnter()
+    public async Task PingUnits_VersionMismatch_SyncEnter()
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
@@ -460,14 +466,14 @@ public class PubSubTests
         try
         {
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(8, "mob", V(50, 50), player);
             Assert.Equal(0, u.Version);
 
             u.Position = V(60, 60);
             Assert.Equal(1, u.Version);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            Thread.Sleep(100);
+            await pubSub.FlushAsync();
 
             Action<(long, List<IUnit<Player>>)> cb = tuple =>
             {
@@ -477,11 +483,11 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(cb);
 
-            // Ping with old version 0 — server has version 1
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>
             {
                 { new UnitKey(8, "mob"), 0 }
             });
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -496,7 +502,7 @@ public class PubSubTests
     // ===== PublishEvent =====
 
     [Fact]
-    public void PublishEvent_UnitEvent()
+    public async Task PublishEvent_UnitEvent()
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -519,11 +525,11 @@ public class PubSubTests
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(11, "hero", V(30, 30), player);
-            Thread.Sleep(100);
+            var u = await pubSub.CreateUnitAsync<Player>(11, "hero", V(30, 30), player);
 
             var eventData = new { damage = 50 };
             u.PublishEvent("attack", eventData);
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -537,7 +543,7 @@ public class PubSubTests
     // ===== Multiple watchers =====
 
     [Fact]
-    public void MultipleWatchers_BatchEnter_BatchLeave()
+    public async Task MultipleWatchers_BatchEnter_BatchLeave()
     {
         var enterSignal = new ManualResetEventSlim();
         var leaveSignal = new ManualResetEventSlim();
@@ -558,7 +564,7 @@ public class PubSubTests
             pubSub.AddWatcher(2, V(0, 0), 200);
 
             var player = new Player();
-            var u = pubSub.CreateUnit<Player>(42, "hero", V(50, 50), player);
+            var u = await pubSub.CreateUnitAsync<Player>(42, "hero", V(50, 50), player);
 
             Assert.True(enterSignal.Wait(5000));
             Assert.NotNull(enterIds);
@@ -574,6 +580,7 @@ public class PubSubTests
             pubSub.OnUnitLeave(leaveCb);
 
             u.Destroy();
+            await pubSub.FlushAsync();
 
             Assert.True(leaveSignal.Wait(5000));
             Assert.NotNull(leaveIds);
@@ -589,12 +596,12 @@ public class PubSubTests
     private static UnitKey CreateDoomedUnit(IPubSub pubSub)
     {
         var target = new Player { Name = "doomed" };
-        pubSub.CreateUnit<Player>(13, "mob", V(50, 50), target);
+        pubSub.CreateUnit<Player>(13, "mob", V(50, 50), target, _ => { });
         return new UnitKey(13, "mob");
     }
 
     [Fact]
-    public void LazyCleanup_DeadUnitRemoved()
+    public async Task LazyCleanup_DeadUnitRemoved()
     {
         var signal = new ManualResetEventSlim();
         List<UnitKey>? unitKeys = null;
@@ -604,7 +611,7 @@ public class PubSubTests
         {
             var deadKey = CreateDoomedUnit(pubSub);
             pubSub.AddWatcher(1, V(0, 0), 200);
-            Thread.Sleep(100);
+            await pubSub.FlushAsync();
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -618,6 +625,7 @@ public class PubSubTests
             pubSub.OnUnitLeave<Player>(cb);
 
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
+            await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(unitKeys);
@@ -627,10 +635,58 @@ public class PubSubTests
         finally { pubSub.Dispose(); }
     }
 
+    [Fact]
+    public async Task LazyCleanup_EnterThenLeaveAfterGC()
+    {
+        var enterSignal = new ManualResetEventSlim();
+        var leaveSignal = new ManualResetEventSlim();
+        IUnit<Player>? enteredUnit = null;
+        List<UnitKey>? leaveKeys = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(long, List<IUnit<Player>>)> enterCb = tuple =>
+            {
+                enteredUnit = tuple.Item2.FirstOrDefault();
+                enterSignal.Set();
+            };
+            pubSub.OnUnitEnter(enterCb);
+
+            var deadKey = CreateDoomedUnit(pubSub);
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
+
+            Assert.True(enterSignal.Wait(5000));
+            Assert.NotNull(enteredUnit);
+            Assert.Equal(13, enteredUnit.Id);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            Action<(long, List<UnitKey>)> leaveCb = tuple =>
+            {
+                leaveKeys = new List<UnitKey>(tuple.Item2);
+                leaveSignal.Set();
+            };
+            pubSub.OnUnitLeave<Player>(leaveCb);
+
+            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
+            await pubSub.FlushAsync();
+
+            Assert.True(leaveSignal.Wait(5000));
+            Assert.NotNull(leaveKeys);
+            Assert.Single(leaveKeys);
+            Assert.Equal(13, leaveKeys[0].Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
     // ===== Worker thread resilience =====
 
     [Fact]
-    public void WorkerThread_SurvivesCallbackException()
+    public async Task WorkerThread_SurvivesCallbackException()
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
@@ -639,12 +695,12 @@ public class PubSubTests
         try
         {
             pubSub.AddWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
 
             Action<(List<long>, IUnit<Player>)> boom = _ => throw new InvalidOperationException("boom");
             pubSub.OnUnitEnter(boom);
             var player1 = new Player();
-            var u1 = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player1);
-            Thread.Sleep(100);
+            var u1 = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player1);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
             {
@@ -653,7 +709,7 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(cb);
             var player2 = new Player();
-            var u2 = pubSub.CreateUnit<Player>(2, "hero", V(60, 60), player2);
+            var u2 = await pubSub.CreateUnitAsync<Player>(2, "hero", V(60, 60), player2);
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);

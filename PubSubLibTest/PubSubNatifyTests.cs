@@ -260,7 +260,7 @@ public class PubSubNatifyTests : IDisposable
     // ===== Outbound =====
 
     [Fact]
-    public void Sync_AddUnit_BroadcastsBatchEnter()
+    public async Task Sync_AddUnit_BroadcastsBatchEnter()
     {
         var signal = new ManualResetEventSlim();
         BatchEnterMsg? received = null;
@@ -272,7 +272,7 @@ public class PubSubNatifyTests : IDisposable
 
         _pubSub.AddWatcher(1, V(0, 0), 200);
         var player = new Player();
-        _pubSub.CreateUnit<Player>(10, "hero", V(50, 50), player);
+        await _pubSub.CreateUnitAsync<Player>(10, "hero", V(50, 50), player);
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -282,7 +282,7 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_RemoveUnit_BroadcastsBatchLeave()
+    public async Task Sync_RemoveUnit_BroadcastsBatchLeave()
     {
         var signal = new ManualResetEventSlim();
         BatchLeaveMsg? received = null;
@@ -294,10 +294,10 @@ public class PubSubNatifyTests : IDisposable
 
         _pubSub.AddWatcher(1, V(0, 0), 200);
         var player = new Player();
-        var u = _pubSub.CreateUnit<Player>(20, "mob", V(50, 50), player);
-        Thread.Sleep(200);
+        var u = await _pubSub.CreateUnitAsync<Player>(20, "mob", V(50, 50), player);
 
         u.Destroy();
+        await _pubSub.FlushAsync();
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -306,10 +306,10 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_AddWatcher_BroadcastsSyncEnter()
+    public async Task Sync_AddWatcher_BroadcastsSyncEnter()
     {
         var player = new Player();
-        _pubSub.CreateUnit<Player>(30, "item", V(50, 50), player);
+        await _pubSub.CreateUnitAsync<Player>(30, "item", V(50, 50), player);
 
         var signal = new ManualResetEventSlim();
         SyncEnterMsg? received = null;
@@ -330,12 +330,12 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_UnitPositionChange_IntoRange_BroadcastsBatchEnter()
+    public async Task Sync_UnitPositionChange_IntoRange_BroadcastsBatchEnter()
     {
         _pubSub.AddWatcher(1, V(0, 0), 200);
         var player = new Player();
-        var u = _pubSub.CreateUnit<Player>(40, "hero", V(500, 500), player);
-        Thread.Sleep(300);
+        var u = await _pubSub.CreateUnitAsync<Player>(40, "hero", V(500, 500), player);
+        await _pubSub.FlushAsync();
 
         var signal = new ManualResetEventSlim();
         BatchEnterMsg? received = null;
@@ -346,6 +346,7 @@ public class PubSubNatifyTests : IDisposable
         });
 
         u.Position = V(50, 50);
+        await _pubSub.FlushAsync();
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -354,7 +355,7 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_UnitEvent_Broadcasts()
+    public async Task Sync_UnitEvent_Broadcasts()
     {
         var signal = new ManualResetEventSlim();
         UnitEventMsg? received = null;
@@ -366,10 +367,11 @@ public class PubSubNatifyTests : IDisposable
 
         _pubSub.AddWatcher(1, V(0, 0), 200);
         var player = new Player();
-        var u = _pubSub.CreateUnit<Player>(50, "hero", V(50, 50), player);
-        Thread.Sleep(200);
+        var u = await _pubSub.CreateUnitAsync<Player>(50, "hero", V(50, 50), player);
+        await _pubSub.FlushAsync();
 
         u.PublishEvent("attack", new byte[] { 99 });
+        await _pubSub.FlushAsync();
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -378,7 +380,7 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_UnitData_IncludedInBatchEnter()
+    public async Task Sync_UnitData_IncludedInBatchEnter()
     {
         var signal = new ManualResetEventSlim();
         BatchEnterMsg? received = null;
@@ -390,7 +392,7 @@ public class PubSubNatifyTests : IDisposable
 
         _pubSub.AddWatcher(1, V(0, 0), 200);
         var player = new Player();
-        _pubSub.CreateUnit<Player>(60, "hero", V(50, 50), player, new byte[] { 7, 8, 9 });
+        await _pubSub.CreateUnitAsync<Player>(60, "hero", V(50, 50), player, new byte[] { 7, 8, 9 });
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -399,7 +401,7 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_MultipleWatchers_SingleTopicBatchEnter()
+    public async Task Sync_MultipleWatchers_SingleTopicBatchEnter()
     {
         var signal = new ManualResetEventSlim();
         BatchEnterMsg? received = null;
@@ -411,10 +413,10 @@ public class PubSubNatifyTests : IDisposable
 
         _pubSub.AddWatcher(1, V(0, 0), 200);
         _pubSub.AddWatcher(2, V(0, 0), 200);
-        Thread.Sleep(200);
+        await _pubSub.FlushAsync();
 
         var player = new Player();
-        _pubSub.CreateUnit<Player>(70, "hero", V(50, 50), player);
+        await _pubSub.CreateUnitAsync<Player>(70, "hero", V(50, 50), player);
 
         Assert.True(signal.Wait(5000));
         Assert.NotNull(received);
@@ -426,14 +428,14 @@ public class PubSubNatifyTests : IDisposable
     // ===== Inbound =====
 
     [Fact]
-    public void Sync_Inbound_AddWatcher_Called()
+    public async Task Sync_Inbound_AddWatcher_Called()
     {
         var signal = new ManualResetEventSlim();
         Action<(long, List<IUnit<Player>>)> cb = _ => signal.Set();
         _pubSub.OnUnitEnter(cb);
 
         var player = new Player();
-        _pubSub.CreateUnit<Player>(80, "mob", V(50, 50), player);
+        await _pubSub.CreateUnitAsync<Player>(80, "mob", V(50, 50), player);
 
         _client.SendAddWatcher(new AddWatcherCmd
         {
@@ -444,10 +446,10 @@ public class PubSubNatifyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_PingUnits_VersionMismatch_SyncEnter()
+    public async Task Sync_PingUnits_VersionMismatch_SyncEnter()
     {
         var player = new Player();
-        var u = _pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
+        var u = await _pubSub.CreateUnitAsync<Player>(8, "mob", V(50, 50), player);
         u.Position = V(60, 60);
 
         var enterSignal = new ManualResetEventSlim();

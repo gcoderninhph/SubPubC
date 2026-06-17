@@ -76,10 +76,8 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
 
     private void HandlePublishEvent(PublishEventCmd cmd)
     {
-        var key = new UnitKey(cmd.UnitId, cmd.UnitType);
-        var unit = _pubSub.TryResolveAlive(key);
-        if (unit != null)
-            ((IUnit<T>)unit).PublishEvent(cmd.EventName, cmd.Data != null ? cmd.Data.ToByteArray() : null);
+        _pubSub.HandleNatifyPublishEvent(cmd.UnitId, cmd.UnitType, cmd.EventName,
+            cmd.Data != null ? cmd.Data.ToByteArray() : null);
     }
 
     // ===== Outbound =====

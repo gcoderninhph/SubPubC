@@ -9,7 +9,9 @@ public interface IPubSub : IDisposable
         return PubSub<T>.Create(config);
     }
 
-    IUnit<T> CreateUnit<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class;
+    void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit<T>> onCreated, byte[]? data = null) where T : class;
+    Task<IUnit<T>> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class;
+    Task FlushAsync();
 
     void AddWatcher(long watcherId, Vector2 position, float radius);
     void RemoveWatcher(long watcherId);
