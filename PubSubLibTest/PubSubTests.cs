@@ -151,33 +151,53 @@ public class PubSubTests
     [Fact]
     public async Task RemoveWatcher_ExistingUnit_SyncLeave()
     {
-        var signal = new ManualResetEventSlim();
-        long watcherId = 0;
-        List<UnitKey>? unitKeys = null;
+        var enterSignal = new ManualResetEventSlim();
+        var leaveSignal = new ManualResetEventSlim();
+        long enterWatcherId = 0;
+        List<IUnit<Player>>? enterUnits = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            Action<(long, List<UnitKey>)> cb = tuple =>
+            pubSub.OnUnitEnter<Player>(tuple =>
             {
-                watcherId = tuple.Item1;
-                unitKeys = new List<UnitKey>(tuple.Item2);
-                signal.Set();
-            };
-            pubSub.OnUnitLeave<Player>(cb);
+                enterWatcherId = tuple.Item1;
+                enterUnits = new List<IUnit<Player>>(tuple.Item2);
+                enterSignal.Set();
+            });
 
-            pubSub.AddWatcher(1, V(0, 0), 200);
+            Action<(long, List<UnitKey>)> leaveCb = _ => leaveSignal.Set();
+            pubSub.OnUnitLeave<Player>(leaveCb);
+
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(5, "item", V(50, 50), player);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
+
+            Assert.True(enterSignal.Wait(5000));
+            Assert.Equal(1, enterWatcherId);
+            Assert.NotNull(enterUnits);
+            Assert.Single(enterUnits);
+            Assert.Equal(5, enterUnits[0].Id);
+
+            enterSignal.Reset();
+            enterWatcherId = 0;
+            enterUnits = null;
+
             pubSub.RemoveWatcher(1);
             await pubSub.FlushAsync();
 
-            Assert.True(signal.Wait(5000));
-            Assert.Equal(1, watcherId);
-            Assert.NotNull(unitKeys);
-            Assert.Single(unitKeys);
-            Assert.Equal(5, unitKeys[0].Id);
-            Assert.Equal("item", unitKeys[0].Type);
+            Assert.False(leaveSignal.Wait(1000), "SyncLeave must not fire when watcher is removed");
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            await pubSub.FlushAsync();
+
+            Assert.True(enterSignal.Wait(5000));
+            Assert.Equal(1, enterWatcherId);
+            Assert.NotNull(enterUnits);
+            Assert.Single(enterUnits);
+            Assert.Equal(5, enterUnits[0].Id);
         }
         finally { pubSub.Dispose(); }
     }
@@ -714,6 +734,57 @@ public class PubSubTests
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
             Assert.Contains(1L, watcherIds);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== Watcher Expiration =====
+
+    [Fact]
+    public async Task WatcherExpires_OnlyPingedWatcherSurvives()
+    {
+        var config = new PubSubConfig
+        {
+            GridSize = 100f,
+            WatcherTimeoutSeconds = 1,
+            WatcherCleanupIntervalSeconds = 1
+        };
+        var pubSub = IPubSub.Create<Player>(config);
+        try
+        {
+            pubSub.AddWatcher(1, V(0, 0), 200f);
+            pubSub.AddWatcher(2, V(0, 0), 200f);
+            await pubSub.FlushAsync();
+
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+                    await Task.Delay(300, cts.Token);
+                }
+            });
+
+            await Task.Delay(3000);
+            cts.Cancel();
+            await pubSub.FlushAsync();
+
+            var signal = new ManualResetEventSlim();
+            List<long>? enteredWatcherIds = null;
+            pubSub.OnUnitEnter<Player>(tuple =>
+            {
+                enteredWatcherIds = new List<long>(tuple.Item1);
+                signal.Set();
+            });
+
+            var player = new Player { Name = "B" };
+            await pubSub.CreateUnitAsync<Player>(20, "mob", V(50, 50), player);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(enteredWatcherIds);
+            Assert.Single(enteredWatcherIds);
+            Assert.Equal(1, enteredWatcherIds[0]);
         }
         finally { pubSub.Dispose(); }
     }

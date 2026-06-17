@@ -1,3 +1,4 @@
+using Gcoder.Collections;
 using Natify;
 
 namespace PubSubLib;
@@ -5,19 +6,28 @@ namespace PubSubLib;
 internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
 {
     private readonly float _config_GridSize;
+    private readonly long _config_WatcherTimeoutTicks;
+    private readonly int _config_WatcherCleanupInterval;
     private readonly Dictionary<UnitKey, Unit<T>> _units;
     private readonly Dictionary<long, Watcher> _watchers;
     private readonly Dictionary<string, Cell> _cells;
+    private readonly ISortedDictionary<long, long> _watcherExpirations;
     private readonly EventChannel<T> _channel;
     private PubSubNatifySync<T>? _natifySync;
+    private DateTime _lastCleanupCheck;
 
     private PubSub(PubSubConfig config)
     {
         _config_GridSize = config.GridSize;
+        _config_WatcherTimeoutTicks = config.WatcherTimeoutSeconds * TimeSpan.TicksPerSecond;
+        _config_WatcherCleanupInterval = config.WatcherCleanupIntervalSeconds;
         _units = new Dictionary<UnitKey, Unit<T>>();
         _watchers = new Dictionary<long, Watcher>();
         _cells = new Dictionary<string, Cell>();
+        _watcherExpirations = new DictionaryScore<long, long>();
+        _lastCleanupCheck = DateTime.UtcNow;
         _channel = new EventChannel<T>();
+        _channel.SetOnIdleCheck(CheckIdle);
     }
 
     internal static IPubSub Create(PubSubConfig config)
@@ -76,6 +86,9 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
             var watcher = new Watcher(watcherId, position, radius);
             _watchers[watcherId] = watcher;
+
+            var nowTicks = DateTime.UtcNow.Ticks;
+            _watcherExpirations.Add(watcherId, nowTicks + _config_WatcherTimeoutTicks);
 
             var cellIds = SubC.GetAllGridCellsInRange(position, radius, _config_GridSize);
             watcher.AddCells(cellIds);
@@ -142,6 +155,10 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         _channel.Enqueue(() =>
         {
             if (!_watchers.TryGetValue(watcherId, out var watcher)) return;
+
+            var nowTicks = DateTime.UtcNow.Ticks;
+            _watcherExpirations.Remove(watcherId);
+            _watcherExpirations.Add(watcherId, nowTicks + _config_WatcherTimeoutTicks);
 
             var cells = watcher.Cells;
             var actualKeys = new HashSet<UnitKey>();
@@ -317,6 +334,26 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         return null;
     }
 
+    // ===== Expiration =====
+
+    private void CheckIdle()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastCleanupCheck).TotalSeconds >= _config_WatcherCleanupInterval)
+        {
+            _lastCleanupCheck = now;
+            CleanupExpiredWatchers();
+        }
+    }
+
+    private void CleanupExpiredWatchers()
+    {
+        var nowTicks = DateTime.UtcNow.Ticks;
+        foreach (var (watcherId, _) in _watcherExpirations.RangeByScore(0, nowTicks))
+            RemoveWatcherInternal(watcherId);
+        _watcherExpirations.RemoveRangeByScore(0, nowTicks);
+    }
+
     // ===== IDisposable =====
 
     public void Dispose()
@@ -380,10 +417,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         }
 
         _watchers.Remove(watcherId);
-
-        var allUnitIds = GetAllUnitsInCells(cellIds);
-        if (allUnitIds.Length > 0)
-            FireSyncLeave(watcherId, allUnitIds);
+        _watcherExpirations.Remove(watcherId);
     }
 
     private void HandlePositionChanged<TUnit>(Unit<TUnit> unit) where TUnit : class

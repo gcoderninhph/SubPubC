@@ -22,6 +22,13 @@ internal sealed class EventChannel<T> : IDisposable where T : class
     internal Action<long, List<UnitKey>>? AfterSyncLeave;
     internal Action<IUnit<T>, List<long>, string, object?>? AfterUnitEvent;
 
+    private Action _onIdleCheck = () => { };
+
+    internal void SetOnIdleCheck(Action handler)
+    {
+        _onIdleCheck = handler ?? (() => { });
+    }
+
     public EventChannel()
     {
         _channel = Channel.CreateUnbounded<Action>();
@@ -56,15 +63,17 @@ internal sealed class EventChannel<T> : IDisposable where T : class
         {
             try
             {
-                _reader.WaitToReadAsync(_cts.Token).AsTask().Wait();
+                _reader.WaitToReadAsync(_cts.Token).AsTask().Wait(1000);
             }
-            catch { break; }
+            catch { }
 
             while (_reader.TryRead(out var action))
             {
                 try { action(); }
                 catch { }
             }
+
+            try { _onIdleCheck(); } catch { }
         }
     }
 }
