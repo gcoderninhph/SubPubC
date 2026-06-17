@@ -87,6 +87,7 @@ Giá trị `x`, `y`, `range` là số thực (`float`). Các giá trị cách nh
 | `Watcher.<watcherId>.Unit.Event.<event_name>` | Unit event trong vùng | `unitId` |
 | `Watcher.<watcherId>.Unit.<unitId>.Payload.<payload_subject>` | Payload từ Unit | `byte[]` |
 | `Provider.Unit.Enter` | Thông tin các unit cần cung cấp Unit.Enter | `unitId1,unitId2,...` |
+| `Provider.Unit.Expired` | Danh sách unit hết hạn khi không được ping | `unitId1,unitId2,...` |
 "#
     );
 
@@ -200,15 +201,7 @@ async fn handle_unit_ping(mut sub: async_nats::Subscriber) {
                 let missing = unit::ping(&unit_ids);
                 if !missing.is_empty() {
                     // Ask providers to send Unit.Enter for missing units in chunks.
-                    const MAX_UNIT_IDS_PER_PAYLOAD: usize = 100;
-                    for chunk in missing.chunks(MAX_UNIT_IDS_PER_PAYLOAD) {
-                        let payload = chunk.join(",");
-                        info!("Provider.Unit.Enter requested for: {}", payload);
-                        nats_publish(
-                            "Provider.Unit.Enter".to_string(),
-                            Bytes::from(payload),
-                        );
-                    }
+                    publish_unit_ids_in_chunks("Provider.Unit.Enter", &missing);
                 }
             }
             Err(e) => error!("Error processing Unit.Ping: {}", e),
@@ -221,7 +214,20 @@ async fn unit_expiry_checker() {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
     loop {
         interval.tick().await;
-        unit::check_expired();
+        let expired = unit::check_expired();
+        if !expired.is_empty() {
+            publish_unit_ids_in_chunks("Provider.Unit.Expired", &expired);
+        }
+    }
+}
+
+fn publish_unit_ids_in_chunks(subject: &str, unit_ids: &[String]) {
+    const MAX_UNIT_IDS_PER_PAYLOAD: usize = 100;
+
+    for chunk in unit_ids.chunks(MAX_UNIT_IDS_PER_PAYLOAD) {
+        let payload = chunk.join(",");
+        info!("{} published: {}", subject, payload);
+        nats_publish(subject.to_string(), Bytes::from(payload));
     }
 }
 

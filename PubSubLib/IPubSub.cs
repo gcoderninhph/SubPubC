@@ -1,4 +1,6 @@
-﻿namespace PubSubLib;
+﻿using Natify;
+
+namespace PubSubLib;
 
 public interface IPubSub : IDisposable
 {
@@ -15,7 +17,8 @@ public interface IPubSub : IDisposable
     void MoveWatcher(long watcherId, Vector2 position, float radius);
     void WatcherPingUnits(long watcherId, string unitType, List<UnitKey> unitKeys);
 
-    void PublishEvent<T>(IUnit<T> unit, string eventName, object? data) where T : class;
+    void AddNatify(NatifyClientFast client);
+    void AddNatify(NatifyClient client);
 
     void OnUnitEnter<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> callBack) where T : class;
     void OnUnitLeave<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> callBack) where T : class;
@@ -30,4 +33,5 @@ internal interface IPubSubInternal
 {
     void OnUnitPositionChanged<T>(Unit<T> unit) where T : class;
     void OnUnitDestroyed<T>(Unit<T> unit) where T : class;
+    void PublishEvent<T>(Unit<T> unit, string eventName, object? data) where T : class;
 }

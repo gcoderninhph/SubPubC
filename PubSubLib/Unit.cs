@@ -5,6 +5,7 @@ internal class Unit<T> : IUnit<T> where T : class
     private Vector2 _position;
     private string _currentCellId = "";
     private WeakReference<T>? _weakRef;
+    private byte[]? _data;
     internal IPubSubInternal? PubSub;
 
     public long Id { get; }
@@ -24,6 +25,8 @@ internal class Unit<T> : IUnit<T> where T : class
     public WeakReference<T> WeakReference => _weakRef!;
     public bool IsAlive => _weakRef != null && _weakRef.TryGetTarget(out _);
 
+    public byte[]? Data { get => _data; set => _data = value; }
+
     public T? Target
     {
         get
@@ -32,6 +35,11 @@ internal class Unit<T> : IUnit<T> where T : class
                 return t;
             return default;
         }
+    }
+
+    void IUnit<T>.PublishEvent(string eventName, object? data)
+    {
+        PubSub?.PublishEvent(this, eventName, data);
     }
 
     public string CurrentCellId

@@ -441,7 +441,7 @@ public class PubSubTests
             Thread.Sleep(100);
 
             var eventData = new { damage = 50 };
-            pubSub.PublishEvent(u, "attack", eventData);
+            u.PublishEvent("attack", eventData);
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);

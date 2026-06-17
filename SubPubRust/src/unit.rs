@@ -145,8 +145,8 @@ pub fn ping(unit_ids: &[&str]) -> Vec<String> {
 }
 
 /// Check all units for ping expiry. Units that haven't been pinged
-/// within `PING_EXPIRY` are removed via `exit()`.
-pub fn check_expired() {
+/// within `PING_EXPIRY` are removed via `exit()` and returned.
+pub fn check_expired() -> Vec<String> {
     let now = Instant::now();
     let expired: Vec<String> = UNITS
         .iter()
@@ -158,6 +158,8 @@ pub fn check_expired() {
         info!("Unit {} expired (no ping for {:?}), removing", uid, PING_EXPIRY);
         exit(uid);
     }
+
+    expired
 }
 
 /// Unit sends a binary payload (forwarded to watchers in its cell).

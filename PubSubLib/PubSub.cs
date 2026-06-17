@@ -1,3 +1,5 @@
+using Natify;
+
 namespace PubSubLib;
 
 internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
@@ -7,6 +9,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
     private readonly Dictionary<UnitKey, Unit<T>> _units;
     private readonly Dictionary<long, Watcher> _watchers;
     private readonly Dictionary<string, Cell> _cells;
+    private PubSubNatifySync<T>? _natifySync;
 
     private PubSub(PubSubConfig config)
     {
@@ -83,11 +86,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
         var allUnitIds = GetAllUnitsInCells(cellIds);
         if (allUnitIds.Length > 0)
-        {
-            var units = ResolveUnits(allUnitIds);
-            if (units.Count > 0)
-                EnqueueSyncEnter(watcherId, units);
-        }
+            ResolveAndSyncEnter(watcherId, allUnitIds);
     }
 
     public void RemoveWatcher(long watcherId)
@@ -141,11 +140,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
         {
             var addedUnitIds = GetAllUnitsInCells(cellsToAdd);
             if (addedUnitIds.Length > 0)
-            {
-                var units = ResolveUnits(addedUnitIds);
-                if (units.Count > 0)
-                    EnqueueSyncEnter(watcherId, units);
-            }
+                ResolveAndSyncEnter(watcherId, addedUnitIds);
         }
 
         if (cellsToRemove.Length > 0)
@@ -176,39 +171,83 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
             }
         }
 
-        var missingKeys = new List<UnitKey>();
-        foreach (var key in actualKeys)
+        var missingKeys = ListPool<UnitKey>.Rent();
+        try
         {
-            if (!unitKeys.Contains(key))
-                missingKeys.Add(key);
-        }
-
-        if (missingKeys.Count > 0)
-        {
-            var missingUnits = new List<IUnit<T>>();
-            foreach (var key in missingKeys)
+            foreach (var key in actualKeys)
             {
-                var unit = TryResolveAlive(key);
-                if (unit != null)
-                    missingUnits.Add(unit);
+                if (!unitKeys.Contains(key))
+                    missingKeys.Add(key);
             }
 
-            if (missingUnits.Count > 0)
-                EnqueueSyncEnter(watcherId, missingUnits);
-        }
+            if (missingKeys.Count > 0)
+            {
+                var missingUnits = ListPool<IUnit<T>>.Rent();
+                try
+                {
+                    foreach (var key in missingKeys)
+                    {
+                        var unit = TryResolveAlive(key);
+                        if (unit != null)
+                            missingUnits.Add(unit);
+                    }
 
-        var extraKeys = new List<UnitKey>();
-        foreach (var key in unitKeys)
+                    if (missingUnits.Count > 0)
+                        EnqueueSyncEnter(watcherId, missingUnits);
+                }
+                finally
+                {
+                    ListPool<IUnit<T>>.Return(missingUnits);
+                }
+            }
+        }
+        finally
         {
-            if (!actualKeys.Contains(key))
-                extraKeys.Add(key);
+            ListPool<UnitKey>.Return(missingKeys);
         }
 
-        if (extraKeys.Count > 0)
-            EnqueueSyncLeave(watcherId, extraKeys.ToArray());
+        var extraKeys = ListPool<UnitKey>.Rent();
+        try
+        {
+            foreach (var key in unitKeys)
+            {
+                if (!actualKeys.Contains(key))
+                    extraKeys.Add(key);
+            }
+
+            if (extraKeys.Count > 0)
+                EnqueueSyncLeave(watcherId, extraKeys.ToArray());
+        }
+        finally
+        {
+            ListPool<UnitKey>.Return(extraKeys);
+        }
     }
 
-    public void PublishEvent<TUnit>(IUnit<TUnit> unit, string eventName, object? data) where TUnit : class
+    public void AddNatify(NatifyClientFast client)
+    {
+        var adapter = new NatifyAdapter(client);
+        AddNatifyInternal(adapter);
+    }
+
+    public void AddNatify(NatifyClient client)
+    {
+        var adapter = new NatifyAdapter(client);
+        AddNatifyInternal(adapter);
+    }
+
+    internal void AddNatifyInternal(INatifyAdapter adapter)
+    {
+        _natifySync?.Dispose();
+        _natifySync = new PubSubNatifySync<T>(adapter, this);
+        _channel.AfterBatchEnter = _natifySync.OnBatchEnter;
+        _channel.AfterBatchLeave = _natifySync.OnBatchLeave;
+        _channel.AfterSyncEnter = _natifySync.OnSyncEnter;
+        _channel.AfterSyncLeave = _natifySync.OnSyncLeave;
+        _channel.AfterUnitEvent = _natifySync.OnUnitEvent;
+    }
+
+    void IPubSubInternal.PublishEvent<TUnit>(Unit<TUnit> unit, string eventName, object? data)
     {
         var cellId = SubC.GetGridCellByPosition(unit.Position, _config.GridSize);
         var watcherIds = GetWatchersInCell(cellId);
@@ -306,12 +345,13 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
     public void Dispose()
     {
+        _natifySync?.Dispose();
         _channel.Dispose();
     }
 
     // ===== Private helpers =====
 
-    private Unit<T>? TryResolveAlive(UnitKey key)
+    internal Unit<T>? TryResolveAlive(UnitKey key)
     {
         if (_units.TryGetValue(key, out var unit) && unit != null)
         {
@@ -352,16 +392,24 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
         return allUnits.ToArray();
     }
 
-    private List<IUnit<T>> ResolveUnits(UnitKey[] unitKeys)
+    private void ResolveAndSyncEnter(long watcherId, UnitKey[] unitKeys)
     {
-        var units = new List<IUnit<T>>();
-        foreach (var key in unitKeys)
+        var units = ListPool<IUnit<T>>.Rent();
+        try
         {
-            var unit = TryResolveAlive(key);
-            if (unit != null)
-                units.Add(unit);
+            foreach (var key in unitKeys)
+            {
+                var unit = TryResolveAlive(key);
+                if (unit != null)
+                    units.Add(unit);
+            }
+            if (units.Count > 0)
+                EnqueueSyncEnter(watcherId, units);
         }
-        return units;
+        finally
+        {
+            ListPool<IUnit<T>>.Return(units);
+        }
     }
 
     private void EnqueueBatchEnter(long[] watcherIds, IUnit<T> unit)
