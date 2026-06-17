@@ -1,0 +1,583 @@
+using PubSubLib;
+
+namespace PubSubLibTest;
+
+class Player
+{
+    public string Name = "";
+}
+
+public class PubSubTests
+{
+    private static IPubSub CreatePubSub(float gridSize = 100f)
+    {
+        return IPubSub.Create<Player>(new PubSubConfig { GridSize = gridSize });
+    }
+
+    private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
+
+    [Fact]
+    public void Create_And_Dispose()
+    {
+        var pubSub = CreatePubSub();
+        Assert.NotNull(pubSub);
+        pubSub.Dispose();
+    }
+
+    // ===== BatchEnter / BatchLeave =====
+
+    [Fact]
+    public void AddUnit_InRange_BatchEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+        IUnit<Player>? unit = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                unit = tuple.Item2;
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(42, "hero", V(50, 50), new Player { Name = "A" });
+            pubSub.AddUnit(u);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Single(watcherIds);
+            Assert.Contains(1L, watcherIds);
+            Assert.NotNull(unit);
+            Assert.Equal(42, unit.Id);
+            Assert.Equal("hero", unit.Type);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void AddUnit_OutOfRange_NoEvent()
+    {
+        var signal = new ManualResetEventSlim();
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit<Player>)> cb = _ => signal.Set();
+            pubSub.OnUnitEnter(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 10);
+            var u = IUnit<Player>.Create(1, "hero", V(200, 200), new Player());
+            pubSub.AddUnit(u);
+
+            Assert.False(signal.Wait(1000));
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void RemoveUnit_InRange_BatchLeave()
+    {
+        var signal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+        IUnit<Player>? unit = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                unit = tuple.Item2;
+                signal.Set();
+            };
+            pubSub.OnUnitLeave(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(99, "npc", V(30, 30), new Player());
+            pubSub.AddUnit(u);
+            pubSub.RemoveUnit(u);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Contains(1L, watcherIds);
+            Assert.NotNull(unit);
+            Assert.Equal(99, unit.Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== SyncEnter / SyncLeave =====
+
+    [Fact]
+    public void AddWatcher_ExistingUnit_SyncEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<IUnit<Player>>? units = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var u = IUnit<Player>.Create(7, "mob", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+
+            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                units = new List<IUnit<Player>>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(units);
+            Assert.Single(units);
+            Assert.Equal(7, units[0].Id);
+            Assert.Equal("mob", units[0].Type);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void RemoveWatcher_ExistingUnit_SyncLeave()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<UnitKey>? unitKeys = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(long, List<UnitKey>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                unitKeys = new List<UnitKey>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitLeave<Player>(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(5, "item", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            pubSub.RemoveWatcher(1);
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(unitKeys);
+            Assert.Single(unitKeys);
+            Assert.Equal(5, unitKeys[0].Id);
+            Assert.Equal("item", unitKeys[0].Type);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== MoveWatcher =====
+
+    [Fact]
+    public void MoveWatcher_IntoRange_SyncEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<IUnit<Player>>? units = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var u = IUnit<Player>.Create(10, "hero", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+
+            pubSub.AddWatcher(1, V(500, 500), 50);
+            Thread.Sleep(100);
+
+            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                units = new List<IUnit<Player>>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            pubSub.MoveWatcher(1, V(0, 0), 200);
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(units);
+            Assert.Single(units);
+            Assert.Equal(10, units[0].Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void MoveWatcher_OutOfRange_SyncLeave()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<UnitKey>? unitKeys = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(long, List<UnitKey>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                unitKeys = new List<UnitKey>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitLeave<Player>(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(20, "mob", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            signal.Reset();
+
+            pubSub.MoveWatcher(1, V(500, 500), 50);
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(unitKeys);
+            Assert.Single(unitKeys);
+            Assert.Equal(20, unitKeys[0].Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== Position change (Unit moves) =====
+
+    [Fact]
+    public void UnitChangeCell_OutOfRange_BatchLeave()
+    {
+        var leaveSignal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            pubSub.AddWatcher(1, V(0, 0), 80);
+            var u = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            Thread.Sleep(100);
+
+            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                leaveSignal.Set();
+            };
+            pubSub.OnUnitLeave(cb);
+
+            u.Position = V(200, 200);
+
+            Assert.True(leaveSignal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Contains(1L, watcherIds);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void UnitChangeCell_StillInRange_NoEvent()
+    {
+        var enterSignal = new ManualResetEventSlim();
+        var leaveSignal = new ManualResetEventSlim();
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            pubSub.AddWatcher(1, V(0, 0), 300);
+            var u = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            Thread.Sleep(100);
+
+            Action<(List<long>, IUnit<Player>)> enterCb = _ => enterSignal.Set();
+            Action<(List<long>, IUnit<Player>)> leaveCb = _ => leaveSignal.Set();
+            pubSub.OnUnitEnter(enterCb);
+            pubSub.OnUnitLeave(leaveCb);
+
+            u.Position = V(150, 150);
+
+            Assert.False(enterSignal.Wait(1000));
+            Assert.False(leaveSignal.Wait(1000));
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void UnitPosition_IntoRange_BatchEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(3, "npc", V(500, 500), new Player());
+            pubSub.AddUnit(u);
+            Thread.Sleep(100);
+
+            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            u.Position = V(50, 50);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Contains(1L, watcherIds);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== WatcherPingUnits =====
+
+    [Fact]
+    public void PingUnits_Missing_SyncEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<IUnit<Player>>? units = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var u = IUnit<Player>.Create(8, "mob", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            Thread.Sleep(100);
+
+            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                units = new List<IUnit<Player>>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey>());
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(units);
+            Assert.Single(units);
+            Assert.Equal(8, units[0].Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void PingUnits_Extra_SyncLeave()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<UnitKey>? unitKeys = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var u = IUnit<Player>.Create(9, "mob", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            Thread.Sleep(100);
+
+            Action<(long, List<UnitKey>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                unitKeys = new List<UnitKey>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitLeave<Player>(cb);
+
+            var fakeKey = new UnitKey(999, "mob");
+            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey> { fakeKey });
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(unitKeys);
+            Assert.Single(unitKeys);
+            Assert.Equal(999, unitKeys[0].Id);
+            Assert.Equal("mob", unitKeys[0].Type);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== PublishEvent =====
+
+    [Fact]
+    public void PublishEvent_UnitEvent()
+    {
+        var signal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+        IUnit<Player>? unit = null;
+        string? eventName = null;
+        object? data = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit<Player>, string, object)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                unit = tuple.Item2;
+                eventName = tuple.Item3;
+                data = tuple.Item4;
+                signal.Set();
+            };
+            pubSub.OnUnitEvent(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            var u = IUnit<Player>.Create(11, "hero", V(30, 30), new Player());
+            pubSub.AddUnit(u);
+            Thread.Sleep(100);
+
+            var eventData = new { damage = 50 };
+            pubSub.PublishEvent(u, "attack", eventData);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Contains(1L, watcherIds);
+            Assert.Equal("attack", eventName);
+            Assert.NotNull(data);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== Multiple watchers =====
+
+    [Fact]
+    public void MultipleWatchers_BatchEnter_BatchLeave()
+    {
+        var enterSignal = new ManualResetEventSlim();
+        var leaveSignal = new ManualResetEventSlim();
+        List<long>? enterIds = null;
+        List<long>? leaveIds = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit<Player>)> enterCb = tuple =>
+            {
+                enterIds = new List<long>(tuple.Item1);
+                enterSignal.Set();
+            };
+            pubSub.OnUnitEnter(enterCb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            pubSub.AddWatcher(2, V(0, 0), 200);
+
+            var u = IUnit<Player>.Create(42, "hero", V(50, 50), new Player());
+            pubSub.AddUnit(u);
+
+            Assert.True(enterSignal.Wait(5000));
+            Assert.NotNull(enterIds);
+            Assert.Equal(2, enterIds.Count);
+            Assert.Contains(1L, enterIds);
+            Assert.Contains(2L, enterIds);
+
+            Action<(List<long>, IUnit<Player>)> leaveCb = tuple =>
+            {
+                leaveIds = new List<long>(tuple.Item1);
+                leaveSignal.Set();
+            };
+            pubSub.OnUnitLeave(leaveCb);
+
+            pubSub.RemoveUnit(u);
+
+            Assert.True(leaveSignal.Wait(5000));
+            Assert.NotNull(leaveIds);
+            Assert.Equal(2, leaveIds.Count);
+            Assert.Contains(1L, leaveIds);
+            Assert.Contains(2L, leaveIds);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== Lazy cleanup =====
+
+    private static (IUnit<Player>, UnitKey) CreateDoomedUnit()
+    {
+        var target = new Player { Name = "doomed" };
+        var u = IUnit<Player>.Create(13, "mob", V(50, 50), target);
+        return (u, new UnitKey(13, "mob"));
+    }
+
+    [Fact]
+    public void LazyCleanup_DeadUnitRemoved()
+    {
+        var signal = new ManualResetEventSlim();
+        List<UnitKey>? unitKeys = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var (u, deadKey) = CreateDoomedUnit();
+            pubSub.AddUnit(u);
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            Thread.Sleep(100);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            Action<(long, List<UnitKey>)> cb = tuple =>
+            {
+                unitKeys = new List<UnitKey>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitLeave<Player>(cb);
+
+            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey> { deadKey });
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(unitKeys);
+            Assert.Single(unitKeys);
+            Assert.Equal(13, unitKeys[0].Id);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    // ===== Worker thread resilience =====
+
+    [Fact]
+    public void WorkerThread_SurvivesCallbackException()
+    {
+        var signal = new ManualResetEventSlim();
+        List<long>? watcherIds = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            pubSub.AddWatcher(1, V(0, 0), 200);
+
+            Action<(List<long>, IUnit<Player>)> boom = _ => throw new InvalidOperationException("boom");
+            pubSub.OnUnitEnter(boom);
+            var u1 = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
+            pubSub.AddUnit(u1);
+            Thread.Sleep(100);
+
+            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            {
+                watcherIds = new List<long>(tuple.Item1);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+            var u2 = IUnit<Player>.Create(2, "hero", V(60, 60), new Player());
+            pubSub.AddUnit(u2);
+
+            Assert.True(signal.Wait(5000));
+            Assert.NotNull(watcherIds);
+            Assert.Contains(1L, watcherIds);
+        }
+        finally { pubSub.Dispose(); }
+    }
+}
