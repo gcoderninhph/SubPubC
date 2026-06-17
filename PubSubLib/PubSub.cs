@@ -29,7 +29,15 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
     // ===== IPubSub =====
 
-    public void AddUnit<TUnit>(IUnit<TUnit> unit) where TUnit : class
+    public IUnit<TUnit> CreateUnit<TUnit>(long id, string type, Vector2 position, TUnit target, byte[]? data = null) where TUnit : class
+    {
+        var unit = new Unit<TUnit>(id, type, position, new WeakReference<TUnit>(target));
+        if (data != null) unit.Data = data;
+        AddUnitInternal(unit);
+        return unit;
+    }
+
+    private void AddUnitInternal<TUnit>(IUnit<TUnit> unit) where TUnit : class
     {
         var u = (Unit<TUnit>)unit;
         u.PubSub = this;
@@ -48,7 +56,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
             EnqueueBatchEnter(watcherIds, (IUnit<T>)(object)u);
     }
 
-    public void RemoveUnit<TUnit>(IUnit<TUnit> unit) where TUnit : class
+    private void RemoveUnitInternal<TUnit>(IUnit<TUnit> unit) where TUnit : class
     {
         var u = (Unit<TUnit>)unit;
         var key = new UnitKey(u.Id, u.Type);
@@ -151,7 +159,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
         }
     }
 
-    public void WatcherPingUnits(long watcherId, string unitType, List<UnitKey> unitKeys)
+    public void WatcherPingUnits(long watcherId, string unitType, Dictionary<UnitKey, int> unitVersions)
     {
         if (!_watchers.TryGetValue(watcherId, out var watcher)) return;
 
@@ -171,48 +179,56 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
             }
         }
 
-        var missingKeys = ListPool<UnitKey>.Rent();
+        var syncKeys = ListPool<UnitKey>.Rent();
         try
         {
             foreach (var key in actualKeys)
             {
-                if (!unitKeys.Contains(key))
-                    missingKeys.Add(key);
+                if (!unitVersions.TryGetValue(key, out var clientVersion))
+                {
+                    syncKeys.Add(key);
+                }
+                else
+                {
+                    var unit = TryResolveAlive(key);
+                    if (unit != null && unit.Version != clientVersion)
+                        syncKeys.Add(key);
+                }
             }
 
-            if (missingKeys.Count > 0)
+            if (syncKeys.Count > 0)
             {
-                var missingUnits = ListPool<IUnit<T>>.Rent();
+                var syncUnits = ListPool<IUnit<T>>.Rent();
                 try
                 {
-                    foreach (var key in missingKeys)
+                    foreach (var key in syncKeys)
                     {
                         var unit = TryResolveAlive(key);
                         if (unit != null)
-                            missingUnits.Add(unit);
+                            syncUnits.Add(unit);
                     }
 
-                    if (missingUnits.Count > 0)
-                        EnqueueSyncEnter(watcherId, missingUnits);
+                    if (syncUnits.Count > 0)
+                        EnqueueSyncEnter(watcherId, syncUnits);
                 }
                 finally
                 {
-                    ListPool<IUnit<T>>.Return(missingUnits);
+                    ListPool<IUnit<T>>.Return(syncUnits);
                 }
             }
         }
         finally
         {
-            ListPool<UnitKey>.Return(missingKeys);
+            ListPool<UnitKey>.Return(syncKeys);
         }
 
         var extraKeys = ListPool<UnitKey>.Rent();
         try
         {
-            foreach (var key in unitKeys)
+            foreach (var kvp in unitVersions)
             {
-                if (!actualKeys.Contains(key))
-                    extraKeys.Add(key);
+                if (!actualKeys.Contains(kvp.Key))
+                    extraKeys.Add(kvp.Key);
             }
 
             if (extraKeys.Count > 0)
@@ -338,7 +354,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
     void IPubSubInternal.OnUnitDestroyed<TUnit>(Unit<TUnit> unit)
     {
-        RemoveUnit<TUnit>(unit);
+        RemoveUnitInternal<TUnit>(unit);
     }
 
     // ===== IDisposable =====
@@ -357,7 +373,7 @@ internal class PubSub<T> : IPubSub, IPubSubInternal where T : class
         {
             if (unit.IsAlive)
                 return unit;
-            RemoveUnit<T>(unit);
+            RemoveUnitInternal<T>(unit);
         }
         return null;
     }

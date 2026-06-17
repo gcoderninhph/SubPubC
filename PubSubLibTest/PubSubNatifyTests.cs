@@ -5,10 +5,10 @@ using PubSubLib.Messages;
 
 namespace PubSubLibTest;
 
-public class PubSubNatifyTests
-{
-    // ===== Proto Roundtrip =====
+// ===== Proto Roundtrip Tests =====
 
+public class PubSubNatifyProtoTests
+{
     [Fact]
     public void Proto_BatchEnterMsg_Roundtrip()
     {
@@ -18,7 +18,8 @@ public class PubSubNatifyTests
             UnitType = "hero",
             PosX = 1.5f,
             PosY = 2.5f,
-            Data = ByteString.CopyFrom(new byte[] { 1, 2, 3 })
+            Data = ByteString.CopyFrom(new byte[] { 1, 2, 3 }),
+            Version = 5
         };
         msg.WatcherIds.AddRange(new[] { 1L, 2L });
 
@@ -32,6 +33,7 @@ public class PubSubNatifyTests
         Assert.Equal(2, parsed.WatcherIds.Count);
         Assert.Equal(1L, parsed.WatcherIds[0]);
         Assert.Equal(3, parsed.Data.Length);
+        Assert.Equal(5, parsed.Version);
     }
 
     [Fact]
@@ -56,7 +58,8 @@ public class PubSubNatifyTests
         msg.Units.Add(new UnitEnterItem
         {
             Id = 10, Type = "npc", PosX = 10f, PosY = 20f,
-            Data = ByteString.CopyFrom(new byte[] { 0xFF })
+            Data = ByteString.CopyFrom(new byte[] { 0xFF }),
+            Version = 3
         });
 
         var bytes = msg.ToByteArray();
@@ -68,6 +71,7 @@ public class PubSubNatifyTests
         Assert.Equal("npc", parsed.Units[0].Type);
         Assert.Equal(10f, parsed.Units[0].PosX);
         Assert.Equal(1, parsed.Units[0].Data.Length);
+        Assert.Equal(3, parsed.Units[0].Version);
     }
 
     [Fact]
@@ -149,8 +153,6 @@ public class PubSubNatifyTests
         Assert.Equal(200f, parsed.AddWatcher.Radius);
     }
 
-    // ===== Command roundtrip =====
-
     [Fact]
     public void Proto_AddWatcherCmd_Roundtrip()
     {
@@ -182,8 +184,14 @@ public class PubSubNatifyTests
     public void Proto_PingUnitsCmd_Roundtrip()
     {
         var cmd = new PingUnitsCmd { WatcherId = 3 };
-        cmd.Units.Add(new TypeGroup { Type = "hero", UnitIds = { 10, 20 } });
-        cmd.Units.Add(new TypeGroup { Type = "mob", UnitIds = { 99 } });
+        var g1 = new TypeGroup { Type = "hero" };
+        g1.UnitIds.AddRange(new long[] { 10, 20 });
+        g1.Versions.AddRange(new int[] { 0, 1 });
+        cmd.Units.Add(g1);
+        var g2 = new TypeGroup { Type = "mob" };
+        g2.UnitIds.Add(99);
+        g2.Versions.Add(2);
+        cmd.Units.Add(g2);
 
         var parsed = PingUnitsCmd.Parser.ParseFrom(cmd.ToByteArray());
 
@@ -193,9 +201,14 @@ public class PubSubNatifyTests
         Assert.Equal(2, parsed.Units[0].UnitIds.Count);
         Assert.Equal(10, parsed.Units[0].UnitIds[0]);
         Assert.Equal(20, parsed.Units[0].UnitIds[1]);
+        Assert.Equal(2, parsed.Units[0].Versions.Count);
+        Assert.Equal(0, parsed.Units[0].Versions[0]);
+        Assert.Equal(1, parsed.Units[0].Versions[1]);
         Assert.Equal("mob", parsed.Units[1].Type);
         Assert.Single(parsed.Units[1].UnitIds);
         Assert.Equal(99, parsed.Units[1].UnitIds[0]);
+        Assert.Single(parsed.Units[1].Versions);
+        Assert.Equal(2, parsed.Units[1].Versions[0]);
     }
 
     [Fact]
@@ -213,235 +226,258 @@ public class PubSubNatifyTests
         Assert.Equal("fireball", parsed.EventName);
         Assert.Equal(2, parsed.Data.Length);
     }
+}
 
-    // ===== PubSubNatifySync Outbound =====
+// ===== Real Natify Integration Tests =====
+
+public class PubSubNatifyTests : IDisposable
+{
+    private const string NatsUrl = "nats://localhost:4222";
+
+    private readonly NatifyServer _natifyServer;
+    private readonly NatifyClientFast _natifyClient;
+    private readonly IPubSubNatifyClient _client;
+    private readonly IPubSub _pubSub;
+
+    public PubSubNatifyTests()
+    {
+        _natifyServer = new NatifyServer(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
+        _natifyClient = new NatifyClientFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
+        _client = IPubSubNatifyClient.Create(_natifyServer, "VN");
+        _pubSub = IPubSub.Create<Player>(new PubSubConfig { GridSize = 100f });
+        _pubSub.AddNatify(_natifyClient);
+        Thread.Sleep(2000);
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        _pubSub.Dispose();
+    }
+
+    private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
+
+    // ===== Outbound =====
 
     [Fact]
     public void Sync_AddUnit_BroadcastsBatchEnter()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var signal = new ManualResetEventSlim();
+        BatchEnterMsg? received = null;
+        _client.OnBatchEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        var u = IUnit<Player>.Create(10, "hero", V(50, 50), new Player());
-        pubSub.AddUnit(u);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        var player = new Player();
+        _pubSub.CreateUnit<Player>(10, "hero", V(50, 50), player);
 
-        Thread.Sleep(200);
-
-        Assert.True(mock.PublishedMessages.Count > 0);
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Contains("PubSub.Evt", topic);
-
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.BatchEnter, evt.EvtCase);
-        Assert.Equal(10, evt.BatchEnter.UnitId);
-        Assert.Equal("hero", evt.BatchEnter.UnitType);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(10, received.UnitId);
+        Assert.Equal("hero", received.UnitType);
+        Assert.Equal(0, received.Version);
     }
 
     [Fact]
     public void Sync_RemoveUnit_BroadcastsBatchLeave()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var signal = new ManualResetEventSlim();
+        BatchLeaveMsg? received = null;
+        _client.OnBatchLeave(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        var u = IUnit<Player>.Create(20, "mob", V(50, 50), new Player());
-        pubSub.AddUnit(u);
-        Thread.Sleep(100);
-        mock.PublishedMessages.Clear();
-
-        pubSub.RemoveUnit(u);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        var player = new Player();
+        var u = _pubSub.CreateUnit<Player>(20, "mob", V(50, 50), player);
         Thread.Sleep(200);
 
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Contains("PubSub.Evt", topic);
+        u.Destroy();
 
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.BatchLeave, evt.EvtCase);
-        Assert.Equal(20, evt.BatchLeave.UnitId);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(20, received.UnitId);
+        Assert.Equal("mob", received.UnitType);
     }
 
     [Fact]
     public void Sync_AddWatcher_BroadcastsSyncEnter()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var player = new Player();
+        _pubSub.CreateUnit<Player>(30, "item", V(50, 50), player);
 
-        var u = IUnit<Player>.Create(30, "item", V(50, 50), new Player());
-        pubSub.AddUnit(u);
-        Thread.Sleep(100);
-        mock.PublishedMessages.Clear();
+        var signal = new ManualResetEventSlim();
+        SyncEnterMsg? received = null;
+        _client.OnSyncEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        Thread.Sleep(200);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
 
-        Assert.True(mock.PublishedMessages.Count > 0);
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Contains("PubSub.Evt", topic);
-
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.SyncEnter, evt.EvtCase);
-        Assert.Equal(1, evt.SyncEnter.WatcherId);
-        Assert.Single(evt.SyncEnter.Units);
-        Assert.Equal(30, evt.SyncEnter.Units[0].Id);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(1, received.WatcherId);
+        Assert.Single(received.Units);
+        Assert.Equal(30, received.Units[0].Id);
+        Assert.Equal(0, received.Units[0].Version);
     }
 
     [Fact]
     public void Sync_UnitPositionChange_IntoRange_BroadcastsBatchEnter()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        var player = new Player();
+        var u = _pubSub.CreateUnit<Player>(40, "hero", V(500, 500), player);
+        Thread.Sleep(300);
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        var u = IUnit<Player>.Create(40, "hero", V(500, 500), new Player());
-        pubSub.AddUnit(u);
-        Thread.Sleep(100);
-        mock.PublishedMessages.Clear();
+        var signal = new ManualResetEventSlim();
+        BatchEnterMsg? received = null;
+        _client.OnBatchEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
         u.Position = V(50, 50);
-        Thread.Sleep(200);
 
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Contains("PubSub.Evt", topic);
-
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.BatchEnter, evt.EvtCase);
-        Assert.Equal(40, evt.BatchEnter.UnitId);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(40, received.UnitId);
+        Assert.Equal(1, received.Version);
     }
 
     [Fact]
     public void Sync_UnitEvent_Broadcasts()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var signal = new ManualResetEventSlim();
+        UnitEventMsg? received = null;
+        _client.OnUnitEvent(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        var u = IUnit<Player>.Create(50, "hero", V(50, 50), new Player());
-        pubSub.AddUnit(u);
-        Thread.Sleep(100);
-        mock.PublishedMessages.Clear();
-
-        u.PublishEvent("attack", new byte[] { 99 });
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        var player = new Player();
+        var u = _pubSub.CreateUnit<Player>(50, "hero", V(50, 50), player);
         Thread.Sleep(200);
 
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Contains("PubSub.Evt", topic);
+        u.PublishEvent("attack", new byte[] { 99 });
 
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.UnitEvent, evt.EvtCase);
-        Assert.Equal(50, evt.UnitEvent.UnitId);
-        Assert.Equal("attack", evt.UnitEvent.EventName);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(50, received.UnitId);
+        Assert.Equal("attack", received.EventName);
     }
 
     [Fact]
     public void Sync_UnitData_IncludedInBatchEnter()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var signal = new ManualResetEventSlim();
+        BatchEnterMsg? received = null;
+        _client.OnBatchEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        var u = IUnit<Player>.Create(60, "hero", V(50, 50), new Player());
-        u.Data = new byte[] { 7, 8, 9 };
-        pubSub.AddUnit(u);
-        Thread.Sleep(200);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        var player = new Player();
+        _pubSub.CreateUnit<Player>(60, "hero", V(50, 50), player, new byte[] { 7, 8, 9 });
 
-        var (_, obj) = mock.PublishedMessages[0];
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(3, evt.BatchEnter.Data.Length);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(3, received.Data.Length);
+        Assert.Equal(1, received.Version);
     }
 
     [Fact]
     public void Sync_MultipleWatchers_SingleTopicBatchEnter()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
+        var signal = new ManualResetEventSlim();
+        BatchEnterMsg? received = null;
+        _client.OnBatchEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
 
-        pubSub.AddWatcher(1, V(0, 0), 200);
-        pubSub.AddWatcher(2, V(0, 0), 200);
-        Thread.Sleep(100);
-        mock.PublishedMessages.Clear();
-
-        var u = IUnit<Player>.Create(70, "hero", V(50, 50), new Player());
-        pubSub.AddUnit(u);
+        _pubSub.AddWatcher(1, V(0, 0), 200);
+        _pubSub.AddWatcher(2, V(0, 0), 200);
         Thread.Sleep(200);
 
-        Assert.Single(mock.PublishedMessages);
-        var (topic, obj) = mock.PublishedMessages[0];
-        Assert.Equal("PubSub.Evt", topic);
+        var player = new Player();
+        _pubSub.CreateUnit<Player>(70, "hero", V(50, 50), player);
 
-        var evt = (PubSubEvent)obj;
-        Assert.Equal(PubSubEvent.EvtOneofCase.BatchEnter, evt.EvtCase);
-        Assert.Equal(new[] { 1L, 2L }, evt.BatchEnter.WatcherIds);
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(2, received.WatcherIds.Count);
+        Assert.Contains(1L, received.WatcherIds);
+        Assert.Contains(2L, received.WatcherIds);
     }
 
-    // ===== PubSubNatifySync Inbound =====
+    // ===== Inbound =====
 
     [Fact]
     public void Sync_Inbound_AddWatcher_Called()
     {
-        var mock = new MockNatifyAdapter();
-        var pubSub = CreatePubSubWithNatify(mock);
-
         var signal = new ManualResetEventSlim();
         Action<(long, List<IUnit<Player>>)> cb = _ => signal.Set();
-        pubSub.OnUnitEnter(cb);
+        _pubSub.OnUnitEnter(cb);
 
-        var u = IUnit<Player>.Create(80, "mob", V(50, 50), new Player());
-        pubSub.AddUnit(u);
+        var player = new Player();
+        _pubSub.CreateUnit<Player>(80, "mob", V(50, 50), player);
 
-        var cmd = new PubSubCommand
+        _client.SendAddWatcher(new AddWatcherCmd
         {
-            AddWatcher = new AddWatcherCmd
-            {
-                WatcherId = 99, PosX = 0, PosY = 0, Radius = 200f
-            }
-        };
-        mock.SimulateReceived<PubSubCommand>("PubSub.Cmd", cmd.ToByteArray());
-        Thread.Sleep(200);
+            WatcherId = 99, PosX = 0, PosY = 0, Radius = 200f
+        });
 
         Assert.True(signal.Wait(5000));
     }
 
-    // ===== Helpers =====
-
-    private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
-
-    private static IPubSub CreatePubSubWithNatify(MockNatifyAdapter mock)
+    [Fact]
+    public void Sync_PingUnits_VersionMismatch_SyncEnter()
     {
-        var pubSub = IPubSub.Create<Player>(new PubSubConfig { GridSize = 100f });
-        var internalPubSub = (PubSubLib.PubSub<Player>)pubSub;
-        internalPubSub.AddNatifyInternal(mock);
-        return pubSub;
-    }
-}
+        var player = new Player();
+        var u = _pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
+        u.Position = V(60, 60);
 
-// ===== MockNatifyAdapter =====
-
-internal class MockNatifyAdapter : INatifyAdapter
-{
-    private readonly Dictionary<string, Delegate> _handlers = new();
-    public List<(string Topic, object Message)> PublishedMessages { get; } = new();
-
-    public void Publish<T>(string topic, T msg) where T : IMessage
-    {
-        PublishedMessages.Add((topic, msg));
-    }
-
-    public void Subscribe<T>(string topic, Action<Data<T>> handler) where T : IMessage, new()
-    {
-        _handlers[topic] = handler;
-    }
-
-    public void SimulateReceived<T>(string topic, byte[] data) where T : IMessage, new()
-    {
-        if (_handlers.TryGetValue(topic, out var handler))
+        var enterSignal = new ManualResetEventSlim();
+        _client.OnSyncEnter(_ => enterSignal.Set());
+        _client.SendAddWatcher(new AddWatcherCmd
         {
-            var action = (Action<Data<T>>)handler;
-            var msg = new T();
-            msg.MergeFrom(data);
-            action(new Data<T>(msg, "", "", ""));
-        }
-    }
+            WatcherId = 1, PosX = 0, PosY = 0, Radius = 200f
+        });
+        Assert.True(enterSignal.Wait(5000));
 
-    public void Dispose() { }
+        var signal = new ManualResetEventSlim();
+        SyncEnterMsg? received = null;
+        _client.OnSyncEnter(msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
+
+        var cmd = new PingUnitsCmd { WatcherId = 1 };
+        var g = new TypeGroup { Type = "mob" };
+        g.UnitIds.Add(8);
+        g.Versions.Add(0);
+        cmd.Units.Add(g);
+        _client.SendPingUnits(cmd);
+
+        Assert.True(signal.Wait(5000));
+        Assert.NotNull(received);
+        Assert.Equal(1, received.WatcherId);
+        Assert.Single(received.Units);
+        Assert.Equal(8, received.Units[0].Id);
+        Assert.Equal(1, received.Units[0].Version);
+    }
 }

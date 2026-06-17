@@ -34,8 +34,8 @@ public class PubSubNatifyIntegrationTests : IDisposable
     [Fact]
     public void SendAddWatcher_UnitInRange_ReceivesSyncEnter()
     {
-        var unit = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
-        _pubSub.AddUnit(unit);
+        var player = new Player();
+        var unit = _pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
 
         var signal = new ManualResetEventSlim();
         SyncEnterMsg? received = null;
@@ -71,8 +71,8 @@ public class PubSubNatifyIntegrationTests : IDisposable
             signal.Set();
         });
 
-        var unit = IUnit<Player>.Create(3, "item", V(50, 50), new Player());
-        _pubSub.AddUnit(unit);
+        var player = new Player();
+        var unit = _pubSub.CreateUnit<Player>(3, "item", V(50, 50), player);
 
         Assert.True(signal.Wait(5000), "Timeout waiting for BatchEnter");
         Assert.NotNull(received);
@@ -84,8 +84,8 @@ public class PubSubNatifyIntegrationTests : IDisposable
     public void SendPublishEvent_ReceivesUnitEvent()
     {
         _pubSub.AddWatcher(400, V(0, 0), 200f);
-        var unit = IUnit<Player>.Create(4, "hero", V(50, 50), new Player());
-        _pubSub.AddUnit(unit);
+        var player = new Player();
+        var unit = _pubSub.CreateUnit<Player>(4, "hero", V(50, 50), player);
         Thread.Sleep(300);
 
         var signal = new ManualResetEventSlim();

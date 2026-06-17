@@ -9,13 +9,12 @@ public interface IPubSub : IDisposable
         return PubSub<T>.Create(config);
     }
 
-    void AddUnit<T>(IUnit<T> unit) where T : class;
-    void RemoveUnit<T>(IUnit<T> unit) where T : class;
+    IUnit<T> CreateUnit<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class;
 
     void AddWatcher(long watcherId, Vector2 position, float radius);
     void RemoveWatcher(long watcherId);
     void MoveWatcher(long watcherId, Vector2 position, float radius);
-    void WatcherPingUnits(long watcherId, string unitType, List<UnitKey> unitKeys);
+    void WatcherPingUnits(long watcherId, string unitType, Dictionary<UnitKey, int> unitVersions);
 
     void AddNatify(NatifyClientFast client);
     void AddNatify(NatifyClient client);

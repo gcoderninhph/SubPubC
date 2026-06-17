@@ -9,6 +9,7 @@ option csharp_namespace = "PubSubLib.Messages";
 message TypeGroup {
     string type = 1;
     repeated int64 unit_ids = 2;
+    repeated int32 versions = 3;
 }
 
 message UnitEnterItem {
@@ -17,6 +18,7 @@ message UnitEnterItem {
     float pos_x = 3;
     float pos_y = 4;
     bytes data = 5;
+    int32 version = 6;
 }
 
 // ===== Outbound (Server -> Client) =====
@@ -39,6 +41,7 @@ message BatchEnterMsg {
     float pos_x = 4;
     float pos_y = 5;
     bytes data = 6;
+    int32 version = 7;
 }
 
 message BatchLeaveMsg {

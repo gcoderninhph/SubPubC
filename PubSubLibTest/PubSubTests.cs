@@ -45,8 +45,8 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(42, "hero", V(50, 50), new Player { Name = "A" });
-            pubSub.AddUnit(u);
+            var player = new Player { Name = "A" };
+            var u = pubSub.CreateUnit<Player>(42, "hero", V(50, 50), player);
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -71,8 +71,8 @@ public class PubSubTests
             pubSub.OnUnitEnter(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 10);
-            var u = IUnit<Player>.Create(1, "hero", V(200, 200), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(1, "hero", V(200, 200), player);
 
             Assert.False(signal.Wait(1000));
         }
@@ -98,9 +98,9 @@ public class PubSubTests
             pubSub.OnUnitLeave(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(99, "npc", V(30, 30), new Player());
-            pubSub.AddUnit(u);
-            pubSub.RemoveUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(99, "npc", V(30, 30), player);
+            u.Destroy();
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);
@@ -123,8 +123,8 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var u = IUnit<Player>.Create(7, "mob", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(7, "mob", V(50, 50), player);
 
             Action<(long, List<IUnit<Player>>)> cb = tuple =>
             {
@@ -165,8 +165,8 @@ public class PubSubTests
             pubSub.OnUnitLeave<Player>(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(5, "item", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(5, "item", V(50, 50), player);
             pubSub.RemoveWatcher(1);
 
             Assert.True(signal.Wait(5000));
@@ -191,8 +191,8 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var u = IUnit<Player>.Create(10, "hero", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(10, "hero", V(50, 50), player);
 
             pubSub.AddWatcher(1, V(500, 500), 50);
             Thread.Sleep(100);
@@ -235,8 +235,8 @@ public class PubSubTests
             pubSub.OnUnitLeave<Player>(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(20, "mob", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(20, "mob", V(50, 50), player);
             signal.Reset();
 
             pubSub.MoveWatcher(1, V(500, 500), 50);
@@ -262,8 +262,8 @@ public class PubSubTests
         try
         {
             pubSub.AddWatcher(1, V(0, 0), 80);
-            var u = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
             Thread.Sleep(100);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
@@ -292,8 +292,8 @@ public class PubSubTests
         try
         {
             pubSub.AddWatcher(1, V(0, 0), 300);
-            var u = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player);
             Thread.Sleep(100);
 
             Action<(List<long>, IUnit<Player>)> enterCb = _ => enterSignal.Set();
@@ -319,8 +319,8 @@ public class PubSubTests
         try
         {
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(3, "npc", V(500, 500), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(3, "npc", V(500, 500), player);
             Thread.Sleep(100);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
@@ -351,8 +351,8 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var u = IUnit<Player>.Create(8, "mob", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
             pubSub.AddWatcher(1, V(0, 0), 200);
             Thread.Sleep(100);
 
@@ -364,7 +364,7 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(cb);
 
-            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey>());
+            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -385,8 +385,8 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var u = IUnit<Player>.Create(9, "mob", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(9, "mob", V(50, 50), player);
             pubSub.AddWatcher(1, V(0, 0), 200);
             Thread.Sleep(100);
 
@@ -399,7 +399,7 @@ public class PubSubTests
             pubSub.OnUnitLeave<Player>(cb);
 
             var fakeKey = new UnitKey(999, "mob");
-            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey> { fakeKey });
+            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { fakeKey, 0 } });
 
             Assert.True(signal.Wait(5000));
             Assert.Equal(1, watcherId);
@@ -407,6 +407,88 @@ public class PubSubTests
             Assert.Single(unitKeys);
             Assert.Equal(999, unitKeys[0].Id);
             Assert.Equal("mob", unitKeys[0].Type);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void UnitVersion_IncrementsOnPositionChange()
+    {
+        var pubSub = CreatePubSub();
+        try
+        {
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(1, "hero", V(0, 0), player);
+            Assert.Equal(0, u.Version);
+
+            u.Position = V(100, 100);
+            Assert.Equal(1, u.Version);
+
+            u.Position = V(200, 200);
+            Assert.Equal(2, u.Version);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void UnitVersion_IncrementsOnDataSet()
+    {
+        var pubSub = CreatePubSub();
+        try
+        {
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(1, "hero", V(0, 0), player);
+            Assert.Equal(0, u.Version);
+
+            u.Data = new byte[] { 1 };
+            Assert.Equal(1, u.Version);
+
+            u.Data = new byte[] { 2, 3 };
+            Assert.Equal(2, u.Version);
+        }
+        finally { pubSub.Dispose(); }
+    }
+
+    [Fact]
+    public void PingUnits_VersionMismatch_SyncEnter()
+    {
+        var signal = new ManualResetEventSlim();
+        long watcherId = 0;
+        List<IUnit<Player>>? units = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(8, "mob", V(50, 50), player);
+            Assert.Equal(0, u.Version);
+
+            u.Position = V(60, 60);
+            Assert.Equal(1, u.Version);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+            Thread.Sleep(100);
+
+            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            {
+                watcherId = tuple.Item1;
+                units = new List<IUnit<Player>>(tuple.Item2);
+                signal.Set();
+            };
+            pubSub.OnUnitEnter(cb);
+
+            // Ping with old version 0 — server has version 1
+            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>
+            {
+                { new UnitKey(8, "mob"), 0 }
+            });
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(1, watcherId);
+            Assert.NotNull(units);
+            Assert.Single(units);
+            Assert.Equal(8, units[0].Id);
+            Assert.Equal(1, units[0].Version);
         }
         finally { pubSub.Dispose(); }
     }
@@ -436,8 +518,8 @@ public class PubSubTests
             pubSub.OnUnitEvent(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
-            var u = IUnit<Player>.Create(11, "hero", V(30, 30), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(11, "hero", V(30, 30), player);
             Thread.Sleep(100);
 
             var eventData = new { damage = 50 };
@@ -475,8 +557,8 @@ public class PubSubTests
             pubSub.AddWatcher(1, V(0, 0), 200);
             pubSub.AddWatcher(2, V(0, 0), 200);
 
-            var u = IUnit<Player>.Create(42, "hero", V(50, 50), new Player());
-            pubSub.AddUnit(u);
+            var player = new Player();
+            var u = pubSub.CreateUnit<Player>(42, "hero", V(50, 50), player);
 
             Assert.True(enterSignal.Wait(5000));
             Assert.NotNull(enterIds);
@@ -491,7 +573,7 @@ public class PubSubTests
             };
             pubSub.OnUnitLeave(leaveCb);
 
-            pubSub.RemoveUnit(u);
+            u.Destroy();
 
             Assert.True(leaveSignal.Wait(5000));
             Assert.NotNull(leaveIds);
@@ -504,11 +586,11 @@ public class PubSubTests
 
     // ===== Lazy cleanup =====
 
-    private static (IUnit<Player>, UnitKey) CreateDoomedUnit()
+    private static UnitKey CreateDoomedUnit(IPubSub pubSub)
     {
         var target = new Player { Name = "doomed" };
-        var u = IUnit<Player>.Create(13, "mob", V(50, 50), target);
-        return (u, new UnitKey(13, "mob"));
+        pubSub.CreateUnit<Player>(13, "mob", V(50, 50), target);
+        return new UnitKey(13, "mob");
     }
 
     [Fact]
@@ -520,8 +602,7 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var (u, deadKey) = CreateDoomedUnit();
-            pubSub.AddUnit(u);
+            var deadKey = CreateDoomedUnit(pubSub);
             pubSub.AddWatcher(1, V(0, 0), 200);
             Thread.Sleep(100);
 
@@ -536,7 +617,7 @@ public class PubSubTests
             };
             pubSub.OnUnitLeave<Player>(cb);
 
-            pubSub.WatcherPingUnits(1, "mob", new List<UnitKey> { deadKey });
+            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(unitKeys);
@@ -561,8 +642,8 @@ public class PubSubTests
 
             Action<(List<long>, IUnit<Player>)> boom = _ => throw new InvalidOperationException("boom");
             pubSub.OnUnitEnter(boom);
-            var u1 = IUnit<Player>.Create(1, "hero", V(50, 50), new Player());
-            pubSub.AddUnit(u1);
+            var player1 = new Player();
+            var u1 = pubSub.CreateUnit<Player>(1, "hero", V(50, 50), player1);
             Thread.Sleep(100);
 
             Action<(List<long>, IUnit<Player>)> cb = tuple =>
@@ -571,8 +652,8 @@ public class PubSubTests
                 signal.Set();
             };
             pubSub.OnUnitEnter(cb);
-            var u2 = IUnit<Player>.Create(2, "hero", V(60, 60), new Player());
-            pubSub.AddUnit(u2);
+            var player2 = new Player();
+            var u2 = pubSub.CreateUnit<Player>(2, "hero", V(60, 60), player2);
 
             Assert.True(signal.Wait(5000));
             Assert.NotNull(watcherIds);

@@ -64,17 +64,13 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
     {
         foreach (var group in cmd.Units)
         {
-            var keys = ListPool<UnitKey>.Rent();
-            try
-            {
-                foreach (var id in group.UnitIds)
-                    keys.Add(new UnitKey(id, group.Type));
-                _pubSub.WatcherPingUnits(cmd.WatcherId, group.Type, keys);
-            }
-            finally
-            {
-                ListPool<UnitKey>.Return(keys);
-            }
+            var unitVersions = new Dictionary<UnitKey, int>();
+            var ids = group.UnitIds;
+            var versions = group.Versions;
+            var count = Math.Min(ids.Count, versions.Count);
+            for (int i = 0; i < count; i++)
+                unitVersions[new UnitKey(ids[i], group.Type)] = versions[i];
+            _pubSub.WatcherPingUnits(cmd.WatcherId, group.Type, unitVersions);
         }
     }
 
@@ -97,7 +93,8 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
             UnitType = unit.Type,
             PosX = unit.Position.x,
             PosY = unit.Position.y,
-            Data = data
+            Data = data,
+            Version = unit.Version
         };
         msg.WatcherIds.AddRange(watcherIds);
 
@@ -128,7 +125,8 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
                 Type = u.Type,
                 PosX = u.Position.x,
                 PosY = u.Position.y,
-                Data = data
+                Data = data,
+                Version = u.Version
             });
         }
 
