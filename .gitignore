@@ -8,6 +8,7 @@ obj/
 .vs/
 *.nupkg
 *.snupkg
+nupkg/
 
 # ── Rust ──────────────────────────────────────────────────────────────
 SubPubRust/target/

@@ -1,6 +1,6 @@
 # SubPubC
 
-Spatial Pub/Sub library for game servers written in .NET (netstandard2.1). Tracks entities (**Units**) on a 2D grid and notifies observers (**Watchers**) when units enter, leave, move, or emit events within their observation radius. Supports standalone local use and networked mode via **Natify** (NATS-based protocol).
+Spatial Pub/Sub library for game servers written in .NET. Tracks entities (**Units**) on a 2D grid and notifies observers (**Watchers**) when units enter, leave, move, or emit events within their observation radius. Supports standalone local use, networked mode via **Natify** (NATS-based protocol), and **Unity** (IL2CPP).
 
 ---
 
@@ -23,6 +23,7 @@ Spatial Pub/Sub library for game servers written in .NET (netstandard2.1). Track
   - [Spatial Grid](#spatial-grid)
   - [Memory Management](#memory-management)
   - [Version Tracking](#version-tracking)
+  - [Watcher Expiration](#watcher-expiration)
   - [After-Callbacks (Natify Bridge)](#after-callbacks-natify-bridge)
 - [Network Protocol (Natify)](#network-protocol-natify)
   - [Topics](#topics)
@@ -50,18 +51,29 @@ Spatial Pub/Sub library for game servers written in .NET (netstandard2.1). Track
 
 ## Installation
 
-Add a reference to `PubSubLib` in your `.csproj`:
+The library multi-targets `netstandard2.1` and `net9.0`:
+
+| Target | Use case |
+|--------|----------|
+| `netstandard2.1` | **Unity** (IL2CPP), older .NET runtimes. `System.Threading.Channels.dll` is **bundled** in the NuGet package — no extra dependency to resolve. |
+| `net9.0` | **Standalone .NET server**. `System.Threading.Channels` comes from the runtime. |
+
+Add the NuGet package to your `.csproj`:
+
+```xml
+<PackageReference Include="PubSubLib" Version="1.0.0" />
+```
+
+Or use a project reference:
 
 ```xml
 <ProjectReference Include="..\PubSubLib\PubSubLib.csproj" />
 ```
 
-Or build the NuGet package and reference it.
-
 **Dependencies:**
-- `System.Threading.Channels` – internal worker queue
-- `Natify` (v1.0.2) – optional, only needed for networked mode
-- `Google.Protobuf` (v3.34.1) – for binary message serialization in networked mode
+- `System.Threading.Channels` — internal worker queue (bundled for netstandard2.1, built-in for net9.0)
+- `Natify` (v1.0.2) — optional, only needed for networked mode
+- `Google.Protobuf` (v3.34.1) — for binary message serialization in networked mode
 
 ---
 
@@ -289,11 +301,15 @@ public interface IPubSub : IDisposable
 ```csharp
 public class PubSubConfig
 {
-    public float GridSize = 100f; // side length of each square grid cell
+    public float GridSize = 100f;                // side length of each square grid cell
+    public int WatcherTimeoutSeconds = 5;        // watcher expires if not pinged within this duration
+    public int WatcherCleanupIntervalSeconds = 2; // how often to check for expired watchers
 }
 ```
 
 - **GridSize**: Smaller values = finer grid = more cells but fewer units per cell. Larger values = coarser grid = fewer cells but more units per cell. Tune based on your world scale and unit density.
+- **WatcherTimeoutSeconds**: If `WatcherPingUnits` is not called for a watcher within this interval, the watcher is automatically removed. Default 5 seconds.
+- **WatcherCleanupIntervalSeconds**: Expired watchers are checked and removed at this interval during the idle phase of the worker loop. Default 2 seconds.
 
 ### IUnit\<T\>
 
@@ -389,7 +405,7 @@ Used when a watcher is added or moved — lists all units currently in range. Al
 ```csharp
 (long watcherId, List<UnitKey> unitKeys)
 ```
-Companion to SyncEnter — sent when watcher is removed, moved away, or ping reveals stale keys.
+Companion to SyncEnter — sent when a watcher is moved away or `WatcherPingUnits` reveals stale keys. **Note:** `RemoveWatcher` does NOT fire `SyncLeave` (the watcher is already gone and does not need notification).
 
 ### UnitEvent
 
@@ -444,6 +460,7 @@ Your Code (any thread)                    Worker Thread ("PubSubLib.EventChannel
        │                                          │── Call FireBatchEnter/FireSyncEnter/...
        │                                          │── Invoke OnUnitEnter callback
        │                                          │── Invoke AfterBatchEnter (→ Natify publish)
+       │                                          │── OnIdleCheck (→ watcher expiration)
        │                                          │
        │◀─ FlushAsync completes ───────────────── │
 ```
@@ -453,6 +470,7 @@ Your Code (any thread)                    Worker Thread ("PubSubLib.EventChannel
 - No locks on `_units`, `_cells`, or `_watchers` dictionaries — only the worker thread mutates them.
 - `FlushAsync()` enqueues a `TaskCompletionSource.SetResult()` — awaiting it guarantees all prior actions are processed.
 - Callbacks are invoked with try/catch inside `Fire*` helpers — a single broken subscriber cannot crash the worker thread.
+- After processing all queued actions, the worker calls `OnIdleCheck` every loop cycle, which runs watcher expiration cleanup at the configured interval.
 
 ### Spatial Grid
 
@@ -487,6 +505,38 @@ Each unit has a `Version` counter incremented on:
 `Version` is sent over Natify in `BatchEnterMsg`, `SyncEnterMsg`/`UnitEnterItem`. Clients can use `WatcherPingUnits` with their known version map to detect stale or missing data. The server responds with:
 - `SyncEnter` for units whose version changed (or new units)
 - `SyncLeave` for keys the client thinks are present but no longer exist
+
+### Watcher Expiration
+
+Watchers must periodically call `WatcherPingUnits` to stay alive. If a watcher does not ping within `WatcherTimeoutSeconds` (default 5), it is automatically removed from the grid.
+
+**How it works:**
+- Each watcher has an expiration timestamp stored in a **sorted dictionary** (`ISortedDictionary<long, long>` implemented by `DictionaryScore`, a Redis ZSET-like data structure using skip list + hash map).
+- On `AddWatcher`, `WatcherPingUnits`, and `RemoveWatcher`, the expiration timestamp is refreshed/removed.
+- During the worker thread's idle phase, `CheckIdle()` compares elapsed time against `WatcherCleanupIntervalSeconds` (default 2). If the interval has passed, `CleanupExpiredWatchers()` removes all watchers with timestamps older than now.
+- `RangeByScore(0, nowTicks)` — O(log n + k) — efficiently fetches only expired watchers without scanning all watchers.
+
+**Example — ping keeps watcher alive:**
+```csharp
+var pubSub = IPubSub.Create<Player>(new PubSubConfig
+{
+    WatcherTimeoutSeconds = 5,
+    WatcherCleanupIntervalSeconds = 2
+});
+
+pubSub.AddWatcher(1, V(0, 0), 200f);
+
+// Ping every 3 seconds to keep watcher alive
+while (running)
+{
+    pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+    await Task.Delay(3000);
+}
+// Watcher 1 stays alive. Any watcher that fails to ping for 5s is auto-removed.
+```
+
+- `SyncLeave` is NOT fired when a watcher expires (same as `RemoveWatcher` — the watcher is already gone).
+- Expired watcher IDs are freed and can be reused immediately.
 
 ### After-Callbacks (Natify Bridge)
 
@@ -553,7 +603,7 @@ dotnet test PubSubLibTest/PubSubLibTest.csproj
 ```
 
 Test categories:
-- **PubSubTests** (16 tests) — unit tests for local PubSub (create/dispose, batch enter/leave, sync enter/leave, move watcher, position change, ping, events, version tracking, lazy cleanup, worker resilience)
+- **PubSubTests** (22 tests) — unit tests for local PubSub (create/dispose, batch enter/leave, sync enter/leave, move watcher, position change, ping, events, version tracking, lazy cleanup, worker resilience, watcher expiration)
 - **PubSubNatifyProtoTests** (12 tests) — protobuf roundtrip tests for all message types
 - **PubSubNatifyTests** (9 tests) — outbound/inbound Natify sync tests (requires local NATS server)
 - **PubSubNatifyIntegrationTests** (3 tests) — end-to-end integration tests (requires local NATS server)

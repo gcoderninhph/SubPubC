@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFrameworks>netstandard2.1;net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>10</LangVersion>
     <Nullable>enable</Nullable>
@@ -11,8 +11,11 @@
     <InternalsVisibleTo Include="PubSubLibTest" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Threading.Channels" Version="10.0.9" PrivateAssets="all" />
+  </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="System.Threading.Channels" Version="10.0.9" />
     <PackageReference Include="Natify" Version="1.0.2" />
     <PackageReference Include="Google.Protobuf" Version="3.34.1" />
     <PackageReference Include="Grpc.Tools" Version="2.70.0" PrivateAssets="All" />
@@ -21,5 +24,14 @@
   <ItemGroup>
     <Protobuf Include="Messages\PubSubMessages.proto" />
   </ItemGroup>
+
+  <Target Name="PackChannelsDll" AfterTargets="Build"
+          Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(NuGetPackageRoot)system.threading.channels\10.0.9\lib\netstandard2.1\System.Threading.Channels.dll">
+        <PackagePath>lib/$(TargetFramework)</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
 
 </Project>
