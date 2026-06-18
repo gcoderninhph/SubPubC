@@ -388,7 +388,7 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(cb);
 
-            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+            pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>> { { "mob", new Dictionary<long, int>() } });
             await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
@@ -424,7 +424,7 @@ public class PubSubTests
             pubSub.OnUnitLeave(cb);
 
             var fakeKey = new UnitKey(999, "mob");
-            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { fakeKey, 0 } });
+            pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>> { { "mob", new Dictionary<long, int> { { fakeKey.Id, 0 } } } });
             await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
@@ -503,9 +503,13 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(cb);
 
-            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>
+            pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>>
             {
-                { new UnitKey(8, "mob"), 0 }
+                { "mob", new Dictionary<long, int>
+                    {
+                        { 8, 0 }
+                    }
+                }
             });
             await pubSub.FlushAsync();
 
@@ -644,7 +648,7 @@ public class PubSubTests
             };
             pubSub.OnUnitLeave(cb);
 
-            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
+            pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>> { { "mob", new Dictionary<long, int> { { deadKey.Id, 0 } } } });
             await pubSub.FlushAsync();
 
             Assert.True(signal.Wait(5000));
@@ -692,7 +696,7 @@ public class PubSubTests
             };
             pubSub.OnUnitLeave(leaveCb);
 
-            pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
+            pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>> { { "mob", new Dictionary<long, int> { { deadKey.Id, 0 } } } });
             await pubSub.FlushAsync();
 
             Assert.True(leaveSignal.Wait(5000));
@@ -761,7 +765,7 @@ public class PubSubTests
             {
                 while (!cts.Token.IsCancellationRequested)
                 {
-                    pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+                    pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>> { { "mob", new Dictionary<long, int>() } });
                     await Task.Delay(300, cts.Token);
                 }
             });

@@ -7,8 +7,10 @@ internal class Watcher
     public float Radius { get; set; }
 
     private HashSet<string> _cells = new();
+    private HashSet<string> _knownTypes = new();
 
     public string[] Cells => _cells.ToArray();
+    public string[] KnownTypes => _knownTypes.ToArray();
 
     public Watcher(long id, Vector2 position, float radius)
     {
@@ -27,5 +29,10 @@ internal class Watcher
     {
         foreach (var id in cellIds)
             _cells.Remove(id);
+    }
+
+    public void RegisterKnownType(string type)
+    {
+        _knownTypes.Add(type);
     }
 }

@@ -16,7 +16,7 @@ public interface IPubSub : IDisposable
     void AddWatcher(long watcherId, Vector2 position, float radius);
     void RemoveWatcher(long watcherId);
     void MoveWatcher(long watcherId, Vector2 position, float radius);
-    void WatcherPingUnits(long watcherId, string unitType, Dictionary<UnitKey, int> unitVersions);
+    void WatcherPingUnits(long watcherId, Dictionary<string, Dictionary<long, int>> typeVersions);
 
     void AddNatify(NatifyClientFast client);
     void AddNatify(NatifyClient client);

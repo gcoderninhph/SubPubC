@@ -62,16 +62,18 @@ internal sealed class PubSubNatifySync : IDisposable
 
     private void HandlePingUnits(PingUnitsCmd cmd)
     {
+        var typeVersions = new Dictionary<string, Dictionary<long, int>>();
         foreach (var group in cmd.Units)
         {
-            var unitVersions = new Dictionary<UnitKey, int>();
+            var dict = new Dictionary<long, int>();
             var ids = group.UnitIds;
             var versions = group.Versions;
             var count = Math.Min(ids.Count, versions.Count);
             for (int i = 0; i < count; i++)
-                unitVersions[new UnitKey(ids[i], group.Type)] = versions[i];
-            _pubSub.WatcherPingUnits(cmd.WatcherId, group.Type, unitVersions);
+                dict[ids[i]] = versions[i];
+            typeVersions[group.Type] = dict;
         }
+        _pubSub.WatcherPingUnits(cmd.WatcherId, typeVersions);
     }
 
     private void HandlePublishEvent(PublishEventCmd cmd)

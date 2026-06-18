@@ -150,7 +150,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         });
     }
 
-    public void WatcherPingUnits(long watcherId, string unitType, Dictionary<UnitKey, int> unitVersions)
+    public void WatcherPingUnits(long watcherId, Dictionary<string, Dictionary<long, int>> typeVersions)
     {
         _channel.Enqueue(() =>
         {
@@ -160,80 +160,89 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
             _watcherExpirations.Remove(watcherId);
             _watcherExpirations.Add(watcherId, nowTicks + _config_WatcherTimeoutTicks);
 
+            foreach (var type in typeVersions.Keys)
+                watcher.RegisterKnownType(type);
+
             var cells = watcher.Cells;
-            var actualKeys = new HashSet<UnitKey>();
-            foreach (var cellId in cells)
+            foreach (var type in watcher.KnownTypes)
             {
-                if (_cells.TryGetValue(cellId, out var cell) && cell != null)
+                var unitVersions = typeVersions.TryGetValue(type, out var dict) ? dict : new Dictionary<long, int>();
+
+                var actualKeys = new HashSet<UnitKey>();
+                foreach (var cellId in cells)
                 {
-                    foreach (var uk in cell.Units)
+                    if (_cells.TryGetValue(cellId, out var cell) && cell != null)
                     {
-                        if (uk.Type != unitType) continue;
-                        var unit = TryResolveAlive(uk);
-                        if (unit != null)
-                            actualKeys.Add(uk);
+                        foreach (var uk in cell.Units)
+                        {
+                            if (uk.Type != type) continue;
+                            var unit = TryResolveAlive(uk);
+                            if (unit != null)
+                                actualKeys.Add(uk);
+                        }
                     }
                 }
-            }
 
-            var syncKeys = ListPool<UnitKey>.Rent();
-            try
-            {
-                foreach (var key in actualKeys)
+                var syncKeys = ListPool<UnitKey>.Rent();
+                try
                 {
-                    if (!unitVersions.TryGetValue(key, out var clientVersion))
+                    foreach (var key in actualKeys)
                     {
-                        syncKeys.Add(key);
-                    }
-                    else
-                    {
-                        var unit = TryResolveAlive(key);
-                        if (unit != null && unit.Version != clientVersion)
+                        if (!unitVersions.TryGetValue(key.Id, out var clientVersion))
+                        {
                             syncKeys.Add(key);
-                    }
-                }
-
-                if (syncKeys.Count > 0)
-                {
-                    var syncUnits = ListPool<IUnit>.Rent();
-                    try
-                    {
-                        foreach (var key in syncKeys)
+                        }
+                        else
                         {
                             var unit = TryResolveAlive(key);
-                            if (unit != null)
-                                syncUnits.Add(unit);
+                            if (unit != null && unit.Version != clientVersion)
+                                syncKeys.Add(key);
                         }
-
-                        if (syncUnits.Count > 0)
-                            FireSyncEnter(watcherId, syncUnits);
                     }
-                    finally
+
+                    if (syncKeys.Count > 0)
                     {
-                        ListPool<IUnit>.Return(syncUnits);
+                        var syncUnits = ListPool<IUnit>.Rent();
+                        try
+                        {
+                            foreach (var key in syncKeys)
+                            {
+                                var unit = TryResolveAlive(key);
+                                if (unit != null)
+                                    syncUnits.Add(unit);
+                            }
+
+                            if (syncUnits.Count > 0)
+                                FireSyncEnter(watcherId, syncUnits);
+                        }
+                        finally
+                        {
+                            ListPool<IUnit>.Return(syncUnits);
+                        }
                     }
                 }
-            }
-            finally
-            {
-                ListPool<UnitKey>.Return(syncKeys);
-            }
-
-            var extraKeys = ListPool<UnitKey>.Rent();
-            try
-            {
-                foreach (var kvp in unitVersions)
+                finally
                 {
-                    if (!actualKeys.Contains(kvp.Key))
-                        extraKeys.Add(kvp.Key);
+                    ListPool<UnitKey>.Return(syncKeys);
                 }
 
-                if (extraKeys.Count > 0)
-                    FireSyncLeave(watcherId, extraKeys.ToArray());
-            }
-            finally
-            {
-                ListPool<UnitKey>.Return(extraKeys);
+                var extraKeys = ListPool<UnitKey>.Rent();
+                try
+                {
+                    foreach (var (unitId, _) in unitVersions)
+                    {
+                        var key = new UnitKey(unitId, type);
+                        if (!actualKeys.Contains(key))
+                            extraKeys.Add(key);
+                    }
+
+                    if (extraKeys.Count > 0)
+                        FireSyncLeave(watcherId, extraKeys.ToArray());
+                }
+                finally
+                {
+                    ListPool<UnitKey>.Return(extraKeys);
+                }
             }
         });
     }
