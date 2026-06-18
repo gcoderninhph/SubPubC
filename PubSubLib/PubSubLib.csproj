@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>10</LangVersion>
     <Nullable>enable</Nullable>
+    <Version>1.1.0</Version>
+    <Authors>PubSubLib</Authors>
   </PropertyGroup>
 
   <ItemGroup>
