@@ -88,7 +88,7 @@ public class PubSubTestAll : IDisposable
     private async Task CreateUnit(long unitId, Vector2 position)
     {
         serverUnit[unitId] = new MyUnit();
-        var a = await _pubSub.CreateUnitAsync(unitId, "T1", position, serverUnit[unitId]);
+        await _pubSub.CreateUnitAsync(unitId, "T1", position, serverUnit[unitId]);
     }
 
     private void DestroyUnit(long unitId)
