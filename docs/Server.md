@@ -29,7 +29,7 @@ Package chứa toàn bộ logic không gian (spatial grid), quản lý Unit/Watc
 Package multi-target `netstandard2.1` (Unity IL2CPP) và `net9.0` (standalone server):
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.0.0" />
+<PackageReference Include="PubSubLib" Version="1.1.0" />
 ```
 
 Hoặc project reference:

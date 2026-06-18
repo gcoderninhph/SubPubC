@@ -266,7 +266,8 @@ SubPubC.sln
 │   ├── PubSubClient.cs        # Client implementation
 │   ├── IPubSubClientModule.cs # Module interface (IClientModule)
 │   ├── PubSubClientModule.cs  # Bridges MyConnection events
-│   ├── IProvider.cs           # Factory tạo/hủy GameObject
+│   ├── IProvider.cs           # Factory tạo/hủy GameObject, OnEvent
+│   ├── EventMeta.cs           # EventTransport enum (Tcp/Udp)
 │   └── Config.cs              # PingIntervalMs
 │
 ├── PubSubLib.Router/         # Router module (netstandard2.1)
@@ -278,6 +279,15 @@ SubPubC.sln
 ├── PubSubLib.Contracts/      # Shared protobuf messages
 ├── PubSubLibTest/            # Test project (xUnit)
 └── SubPubCTest/              # ASP.NET Core test app
+```
+
+## NuGet
+
+```xml
+<PackageReference Include="PubSubLib" Version="1.1.0" />              <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="1.1.0" />       <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="1.1.0" />       <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="1.1.0" />    <!-- Protobuf messages -->
 ```
 
 ## Build & Test
