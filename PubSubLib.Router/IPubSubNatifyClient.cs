@@ -1,7 +1,7 @@
 using Natify;
 using PubSubLib.Messages;
 
-namespace PubSubLib;
+namespace PubSubLib.Router;
 
 public interface IPubSubNatifyClient : IDisposable
 {

@@ -1,7 +1,7 @@
 using Natify;
 using PubSubLib.Messages;
 
-namespace PubSubLib;
+namespace PubSubLib.Router;
 
 internal sealed class PubSubNatifyClient : IPubSubNatifyClient
 {
@@ -78,30 +78,11 @@ internal sealed class PubSubNatifyClient : IPubSubNatifyClient
 
     // ===== Callback registration =====
 
-    public void OnBatchEnter(Action<BatchEnterMsg> callback)
-    {
-        _onBatchEnter = callback;
-    }
-
-    public void OnBatchLeave(Action<BatchLeaveMsg> callback)
-    {
-        _onBatchLeave = callback;
-    }
-
-    public void OnSyncEnter(Action<SyncEnterMsg> callback)
-    {
-        _onSyncEnter = callback;
-    }
-
-    public void OnSyncLeave(Action<SyncLeaveMsg> callback)
-    {
-        _onSyncLeave = callback;
-    }
-
-    public void OnUnitEvent(Action<UnitEventMsg> callback)
-    {
-        _onUnitEvent = callback;
-    }
+    public void OnBatchEnter(Action<BatchEnterMsg> callback) { _onBatchEnter = callback; }
+    public void OnBatchLeave(Action<BatchLeaveMsg> callback) { _onBatchLeave = callback; }
+    public void OnSyncEnter(Action<SyncEnterMsg> callback) { _onSyncEnter = callback; }
+    public void OnSyncLeave(Action<SyncLeaveMsg> callback) { _onSyncLeave = callback; }
+    public void OnUnitEvent(Action<UnitEventMsg> callback) { _onUnitEvent = callback; }
 
     // ===== IDisposable =====
 

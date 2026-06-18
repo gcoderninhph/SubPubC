@@ -2,6 +2,7 @@ using Google.Protobuf;
 using Natify;
 using PubSubLib;
 using PubSubLib.Messages;
+using PubSubLib.Router;
 
 namespace PubSubLibTest;
 

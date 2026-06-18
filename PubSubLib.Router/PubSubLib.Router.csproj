@@ -8,13 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.34.1" />
-    <PackageReference Include="Grpc.Tools" Version="2.70.0" PrivateAssets="All" />
+    <PackageReference Include="Natify" Version="1.0.2" />
     <PackageReference Include="MyConnection" Version="1.0.4" />
+    <PackageReference Include="System.Threading.Channels" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\PubSubLib\Messages\PubSubMessages.proto" Link="Messages\PubSubMessages.proto" />
+    <ProjectReference Include="..\PubSubLib\PubSubLib.csproj" />
   </ItemGroup>
 
 </Project>
