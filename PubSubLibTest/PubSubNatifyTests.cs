@@ -245,7 +245,7 @@ public class PubSubNatifyTests : IDisposable
         _natifyServer = new NatifyServer(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
         _natifyClient = new NatifyClientFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
         _client = IPubSubNatifyClient.Create(_natifyServer, "VN");
-        _pubSub = IPubSub.Create<Player>(new PubSubConfig { GridSize = 100f });
+        _pubSub = IPubSub.Create(new PubSubConfig { GridSize = 100f });
         _pubSub.AddNatify(_natifyClient);
         Thread.Sleep(2000);
     }
@@ -432,7 +432,7 @@ public class PubSubNatifyTests : IDisposable
     public async Task Sync_Inbound_AddWatcher_Called()
     {
         var signal = new ManualResetEventSlim();
-        Action<(long, List<IUnit<Player>>)> cb = _ => signal.Set();
+        Action<(long, List<IUnit>)> cb = _ => signal.Set();
         _pubSub.OnUnitEnter(cb);
 
         var player = new Player();

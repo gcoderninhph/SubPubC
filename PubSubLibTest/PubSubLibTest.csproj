@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PubSubLib.Client\PubSubLib.Client.csproj" />
     <ProjectReference Include="..\PubSubLib\PubSubLib.csproj" />
     <ProjectReference Include="..\PubSubLib.Router\PubSubLib.Router.csproj" />
   </ItemGroup>

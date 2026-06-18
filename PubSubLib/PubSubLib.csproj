@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="Messages\PubSubMessages.proto" />
+    <ProjectReference Include="..\PubSubLib.Contracts\PubSubLib.Contracts.csproj" />
   </ItemGroup>
 
   <Target Name="PackChannelsDll" AfterTargets="Build"

@@ -4,15 +4,15 @@ using PubSubLib.Messages;
 
 namespace PubSubLib;
 
-internal sealed class PubSubNatifySync<T> : IDisposable where T : class
+internal sealed class PubSubNatifySync : IDisposable
 {
     private readonly INatifyAdapter _natify;
-    private readonly PubSub<T> _pubSub;
+    private readonly PubSub _pubSub;
 
     private const string CmdTopic = "PubSub.Cmd";
     private const string EvtTopic = "PubSub.Evt";
 
-    public PubSubNatifySync(INatifyAdapter natify, PubSub<T> pubSub)
+    public PubSubNatifySync(INatifyAdapter natify, PubSub pubSub)
     {
         _natify = natify;
         _pubSub = pubSub;
@@ -82,7 +82,7 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
 
     // ===== Outbound =====
 
-    public void OnBatchEnter(IUnit<T> unit, List<long> watcherIds)
+    public void OnBatchEnter(IUnit unit, List<long> watcherIds)
     {
         var data = ByteString.CopyFrom(unit.Data ?? Array.Empty<byte>());
         var msg = new BatchEnterMsg
@@ -99,7 +99,7 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
         _natify.Publish(EvtTopic, new PubSubEvent { BatchEnter = msg });
     }
 
-    public void OnBatchLeave(IUnit<T> unit, List<long> watcherIds)
+    public void OnBatchLeave(IUnit unit, List<long> watcherIds)
     {
         var msg = new BatchLeaveMsg
         {
@@ -111,7 +111,7 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
         _natify.Publish(EvtTopic, new PubSubEvent { BatchLeave = msg });
     }
 
-    public void OnSyncEnter(long watcherId, List<IUnit<T>> units)
+    public void OnSyncEnter(long watcherId, List<IUnit> units)
     {
         var msg = new SyncEnterMsg { WatcherId = watcherId };
         foreach (var u in units)
@@ -149,7 +149,7 @@ internal sealed class PubSubNatifySync<T> : IDisposable where T : class
         _natify.Publish(EvtTopic, new PubSubEvent { SyncLeave = msg });
     }
 
-    public void OnUnitEvent(IUnit<T> unit, List<long> watcherIds, string eventName, object? data)
+    public void OnUnitEvent(IUnit unit, List<long> watcherIds, string eventName, object? data)
     {
         var msg = new UnitEventMsg
         {

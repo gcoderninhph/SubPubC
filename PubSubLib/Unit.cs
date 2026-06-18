@@ -1,10 +1,10 @@
 namespace PubSubLib;
 
-internal class Unit<T> : IUnit<T> where T : class
+internal class Unit : IUnit
 {
     private Vector2 _position;
     private string _currentCellId = "";
-    private WeakReference<T>? _weakRef;
+    private WeakReference<object>? _weakRef;
     private byte[]? _data;
     private int _version;
     internal IPubSubInternal? PubSub;
@@ -24,24 +24,23 @@ internal class Unit<T> : IUnit<T> where T : class
         }
     }
 
-    public WeakReference<T> WeakReference => _weakRef!;
     public bool IsAlive => _weakRef != null && _weakRef.TryGetTarget(out _);
 
     public int Version => _version;
 
     public byte[]? Data { get => _data; set { _data = value; _version++; } }
 
-    public T? Target
+    public object? Target
     {
         get
         {
             if (_weakRef != null && _weakRef.TryGetTarget(out var t))
                 return t;
-            return default;
+            return null;
         }
     }
 
-    void IUnit<T>.PublishEvent(string eventName, object? data)
+    void IUnit.PublishEvent(string eventName, object? data)
     {
         PubSub?.PublishEvent(this, eventName, data);
     }
@@ -57,11 +56,11 @@ internal class Unit<T> : IUnit<T> where T : class
         set => _currentCellId = value;
     }
 
-    internal Unit(long id, string type, Vector2 position, WeakReference<T> weakRef)
+    internal Unit(long id, string type, Vector2 position, object target)
     {
         Id = id;
         Type = type;
         _position = position;
-        _weakRef = weakRef;
+        _weakRef = new WeakReference<object>(target);
     }
 }

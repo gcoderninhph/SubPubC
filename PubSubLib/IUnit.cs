@@ -1,13 +1,12 @@
 ﻿namespace PubSubLib;
 
-public interface IUnit<T> where T : class
+public interface IUnit
 {
     long Id { get; }
     string Type { get; }
     Vector2 Position { get; set; }
-    WeakReference<T> WeakReference { get; }
     bool IsAlive { get; }
-    T? Target { get; }
+    object? Target { get; }
     int Version { get; }
     byte[]? Data { get; set; }
     void PublishEvent(string eventName, object? data);

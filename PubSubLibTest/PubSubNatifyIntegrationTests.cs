@@ -19,7 +19,7 @@ public class PubSubNatifyIntegrationTests : IDisposable
         _natifyServer = new NatifyServer(NatsUrl, "Router", "RouterGroup", "PubSubServer");
         _natifyClient = new NatifyClientFast(NatsUrl, "PubSubServer", "ServerGroup", "VN", "Router");
         _client = IPubSubNatifyClient.Create(_natifyServer, "VN");
-        _pubSub = IPubSub.Create<Player>(new PubSubConfig { GridSize = 100f });
+        _pubSub = IPubSub.Create(new PubSubConfig { GridSize = 100f });
         _pubSub.AddNatify(_natifyClient);
         Thread.Sleep(2000);
     }

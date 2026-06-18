@@ -11,7 +11,7 @@ public class PubSubTests
 {
     private static IPubSub CreatePubSub(float gridSize = 100f)
     {
-        return IPubSub.Create<Player>(new PubSubConfig { GridSize = gridSize });
+        return IPubSub.Create(new PubSubConfig { GridSize = gridSize });
     }
 
     private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
@@ -31,12 +31,12 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
-        IUnit<Player>? unit = null;
+        IUnit? unit = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            Action<(List<long>, IUnit)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 unit = tuple.Item2;
@@ -67,7 +67,7 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit<Player>)> cb = _ => signal.Set();
+            Action<(List<long>, IUnit)> cb = _ => signal.Set();
             pubSub.OnUnitEnter(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 10);
@@ -84,12 +84,12 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
-        IUnit<Player>? unit = null;
+        IUnit? unit = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            Action<(List<long>, IUnit)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 unit = tuple.Item2;
@@ -119,7 +119,7 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
-        List<IUnit<Player>>? units = null;
+        List<IUnit>? units = null;
 
         var pubSub = CreatePubSub();
         try
@@ -127,10 +127,10 @@ public class PubSubTests
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(7, "mob", V(50, 50), player);
 
-            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            Action<(long, List<IUnit>)> cb = tuple =>
             {
                 watcherId = tuple.Item1;
-                units = new List<IUnit<Player>>(tuple.Item2);
+                units = new List<IUnit>(tuple.Item2);
                 signal.Set();
             };
             pubSub.OnUnitEnter(cb);
@@ -154,20 +154,20 @@ public class PubSubTests
         var enterSignal = new ManualResetEventSlim();
         var leaveSignal = new ManualResetEventSlim();
         long enterWatcherId = 0;
-        List<IUnit<Player>>? enterUnits = null;
+        List<IUnit>? enterUnits = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            pubSub.OnUnitEnter<Player>(tuple =>
+            pubSub.OnUnitEnter(tuple =>
             {
                 enterWatcherId = tuple.Item1;
-                enterUnits = new List<IUnit<Player>>(tuple.Item2);
+                enterUnits = new List<IUnit>(tuple.Item2);
                 enterSignal.Set();
             });
 
             Action<(long, List<UnitKey>)> leaveCb = _ => leaveSignal.Set();
-            pubSub.OnUnitLeave<Player>(leaveCb);
+            pubSub.OnUnitLeave(leaveCb);
 
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(5, "item", V(50, 50), player);
@@ -209,7 +209,7 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
-        List<IUnit<Player>>? units = null;
+        List<IUnit>? units = null;
 
         var pubSub = CreatePubSub();
         try
@@ -220,10 +220,10 @@ public class PubSubTests
             pubSub.AddWatcher(1, V(500, 500), 50);
             await pubSub.FlushAsync();
 
-            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            Action<(long, List<IUnit>)> cb = tuple =>
             {
                 watcherId = tuple.Item1;
-                units = new List<IUnit<Player>>(tuple.Item2);
+                units = new List<IUnit>(tuple.Item2);
                 signal.Set();
             };
             pubSub.OnUnitEnter(cb);
@@ -256,7 +256,7 @@ public class PubSubTests
                 unitKeys = new List<UnitKey>(tuple.Item2);
                 signal.Set();
             };
-            pubSub.OnUnitLeave<Player>(cb);
+            pubSub.OnUnitLeave(cb);
 
             pubSub.AddWatcher(1, V(0, 0), 200);
             var player = new Player();
@@ -289,7 +289,7 @@ public class PubSubTests
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player);
 
-            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            Action<(List<long>, IUnit)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 leaveSignal.Set();
@@ -319,8 +319,8 @@ public class PubSubTests
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player);
 
-            Action<(List<long>, IUnit<Player>)> enterCb = _ => enterSignal.Set();
-            Action<(List<long>, IUnit<Player>)> leaveCb = _ => leaveSignal.Set();
+            Action<(List<long>, IUnit)> enterCb = _ => enterSignal.Set();
+            Action<(List<long>, IUnit)> leaveCb = _ => leaveSignal.Set();
             pubSub.OnUnitEnter(enterCb);
             pubSub.OnUnitLeave(leaveCb);
 
@@ -346,7 +346,7 @@ public class PubSubTests
             var player = new Player();
             var u = await pubSub.CreateUnitAsync<Player>(3, "npc", V(500, 500), player);
 
-            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            Action<(List<long>, IUnit)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 signal.Set();
@@ -370,7 +370,7 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
-        List<IUnit<Player>>? units = null;
+        List<IUnit>? units = null;
 
         var pubSub = CreatePubSub();
         try
@@ -380,10 +380,10 @@ public class PubSubTests
             pubSub.AddWatcher(1, V(0, 0), 200);
             await pubSub.FlushAsync();
 
-            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            Action<(long, List<IUnit>)> cb = tuple =>
             {
                 watcherId = tuple.Item1;
-                units = new List<IUnit<Player>>(tuple.Item2);
+                units = new List<IUnit>(tuple.Item2);
                 signal.Set();
             };
             pubSub.OnUnitEnter(cb);
@@ -421,7 +421,7 @@ public class PubSubTests
                 unitKeys = new List<UnitKey>(tuple.Item2);
                 signal.Set();
             };
-            pubSub.OnUnitLeave<Player>(cb);
+            pubSub.OnUnitLeave(cb);
 
             var fakeKey = new UnitKey(999, "mob");
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { fakeKey, 0 } });
@@ -480,7 +480,7 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         long watcherId = 0;
-        List<IUnit<Player>>? units = null;
+        List<IUnit>? units = null;
 
         var pubSub = CreatePubSub();
         try
@@ -495,10 +495,10 @@ public class PubSubTests
             pubSub.AddWatcher(1, V(0, 0), 200);
             await pubSub.FlushAsync();
 
-            Action<(long, List<IUnit<Player>>)> cb = tuple =>
+            Action<(long, List<IUnit>)> cb = tuple =>
             {
                 watcherId = tuple.Item1;
-                units = new List<IUnit<Player>>(tuple.Item2);
+                units = new List<IUnit>(tuple.Item2);
                 signal.Set();
             };
             pubSub.OnUnitEnter(cb);
@@ -526,14 +526,14 @@ public class PubSubTests
     {
         var signal = new ManualResetEventSlim();
         List<long>? watcherIds = null;
-        IUnit<Player>? unit = null;
+        IUnit? unit = null;
         string? eventName = null;
         object? data = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit<Player>, string, object)> cb = tuple =>
+            Action<(List<long>, IUnit, string, object)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 unit = tuple.Item2;
@@ -573,7 +573,7 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit<Player>)> enterCb = tuple =>
+            Action<(List<long>, IUnit)> enterCb = tuple =>
             {
                 enterIds = new List<long>(tuple.Item1);
                 enterSignal.Set();
@@ -592,7 +592,7 @@ public class PubSubTests
             Assert.Contains(1L, enterIds);
             Assert.Contains(2L, enterIds);
 
-            Action<(List<long>, IUnit<Player>)> leaveCb = tuple =>
+            Action<(List<long>, IUnit)> leaveCb = tuple =>
             {
                 leaveIds = new List<long>(tuple.Item1);
                 leaveSignal.Set();
@@ -642,7 +642,7 @@ public class PubSubTests
                 unitKeys = new List<UnitKey>(tuple.Item2);
                 signal.Set();
             };
-            pubSub.OnUnitLeave<Player>(cb);
+            pubSub.OnUnitLeave(cb);
 
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
             await pubSub.FlushAsync();
@@ -660,13 +660,13 @@ public class PubSubTests
     {
         var enterSignal = new ManualResetEventSlim();
         var leaveSignal = new ManualResetEventSlim();
-        IUnit<Player>? enteredUnit = null;
+        IUnit? enteredUnit = null;
         List<UnitKey>? leaveKeys = null;
 
         var pubSub = CreatePubSub();
         try
         {
-            Action<(long, List<IUnit<Player>>)> enterCb = tuple =>
+            Action<(long, List<IUnit>)> enterCb = tuple =>
             {
                 enteredUnit = tuple.Item2.FirstOrDefault();
                 enterSignal.Set();
@@ -690,7 +690,7 @@ public class PubSubTests
                 leaveKeys = new List<UnitKey>(tuple.Item2);
                 leaveSignal.Set();
             };
-            pubSub.OnUnitLeave<Player>(leaveCb);
+            pubSub.OnUnitLeave(leaveCb);
 
             pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int> { { deadKey, 0 } });
             await pubSub.FlushAsync();
@@ -717,12 +717,12 @@ public class PubSubTests
             pubSub.AddWatcher(1, V(0, 0), 200);
             await pubSub.FlushAsync();
 
-            Action<(List<long>, IUnit<Player>)> boom = _ => throw new InvalidOperationException("boom");
+            Action<(List<long>, IUnit)> boom = _ => throw new InvalidOperationException("boom");
             pubSub.OnUnitEnter(boom);
             var player1 = new Player();
             var u1 = await pubSub.CreateUnitAsync<Player>(1, "hero", V(50, 50), player1);
 
-            Action<(List<long>, IUnit<Player>)> cb = tuple =>
+            Action<(List<long>, IUnit)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 signal.Set();
@@ -749,7 +749,7 @@ public class PubSubTests
             WatcherTimeoutSeconds = 1,
             WatcherCleanupIntervalSeconds = 1
         };
-        var pubSub = IPubSub.Create<Player>(config);
+        var pubSub = IPubSub.Create(config);
         try
         {
             pubSub.AddWatcher(1, V(0, 0), 200f);
@@ -772,7 +772,7 @@ public class PubSubTests
 
             var signal = new ManualResetEventSlim();
             List<long>? enteredWatcherIds = null;
-            pubSub.OnUnitEnter<Player>(tuple =>
+            pubSub.OnUnitEnter(tuple =>
             {
                 enteredWatcherIds = new List<long>(tuple.Item1);
                 signal.Set();

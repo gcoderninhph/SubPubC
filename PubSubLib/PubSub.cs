@@ -3,17 +3,17 @@ using Natify;
 
 namespace PubSubLib;
 
-internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
+internal sealed class PubSub : IPubSub, IPubSubInternal
 {
     private readonly float _config_GridSize;
     private readonly long _config_WatcherTimeoutTicks;
     private readonly int _config_WatcherCleanupInterval;
-    private readonly Dictionary<UnitKey, Unit<T>> _units;
+    private readonly Dictionary<UnitKey, Unit> _units;
     private readonly Dictionary<long, Watcher> _watchers;
     private readonly Dictionary<string, Cell> _cells;
     private readonly ISortedDictionary<long, long> _watcherExpirations;
-    private readonly EventChannel<T> _channel;
-    private PubSubNatifySync<T>? _natifySync;
+    private readonly EventChannel _channel;
+    private PubSubNatifySync? _natifySync;
     private DateTime _lastCleanupCheck;
 
     private PubSub(PubSubConfig config)
@@ -21,43 +21,43 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         _config_GridSize = config.GridSize;
         _config_WatcherTimeoutTicks = config.WatcherTimeoutSeconds * TimeSpan.TicksPerSecond;
         _config_WatcherCleanupInterval = config.WatcherCleanupIntervalSeconds;
-        _units = new Dictionary<UnitKey, Unit<T>>();
+        _units = new Dictionary<UnitKey, Unit>();
         _watchers = new Dictionary<long, Watcher>();
         _cells = new Dictionary<string, Cell>();
         _watcherExpirations = new DictionaryScore<long, long>();
         _lastCleanupCheck = DateTime.UtcNow;
-        _channel = new EventChannel<T>();
+        _channel = new EventChannel();
         _channel.SetOnIdleCheck(CheckIdle);
     }
 
     internal static IPubSub Create(PubSubConfig config)
     {
-        var p = new PubSub<T>(config);
+        var p = new PubSub(config);
         p._channel.Start();
         return p;
     }
 
     // ===== IPubSub =====
 
-    public void CreateUnit<TUnit>(long id, string type, Vector2 position, TUnit target, Action<IUnit<TUnit>> onCreated, byte[]? data = null) where TUnit : class
+    public void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class
     {
         _channel.Enqueue(() =>
         {
-            var unit = new Unit<TUnit>(id, type, position, new WeakReference<TUnit>(target));
+            var unit = new Unit(id, type, position, target);
             if (data != null) unit.Data = data;
             AddUnitInternal(unit);
             onCreated?.Invoke(unit);
         });
     }
 
-    public Task<IUnit<TUnit>> CreateUnitAsync<TUnit>(long id, string type, Vector2 position, TUnit target, byte[]? data = null) where TUnit : class
+    public Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class
     {
-        var tcs = new TaskCompletionSource<IUnit<TUnit>>();
+        var tcs = new TaskCompletionSource<IUnit>();
         _channel.Enqueue(() =>
         {
             try
             {
-                var unit = new Unit<TUnit>(id, type, position, new WeakReference<TUnit>(target));
+                var unit = new Unit(id, type, position, target);
                 if (data != null) unit.Data = data;
                 AddUnitInternal(unit);
                 tcs.SetResult(unit);
@@ -195,7 +195,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
                 if (syncKeys.Count > 0)
                 {
-                    var syncUnits = ListPool<IUnit<T>>.Rent();
+                    var syncUnits = ListPool<IUnit>.Rent();
                     try
                     {
                         foreach (var key in syncKeys)
@@ -210,7 +210,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
                     }
                     finally
                     {
-                        ListPool<IUnit<T>>.Return(syncUnits);
+                        ListPool<IUnit>.Return(syncUnits);
                     }
                 }
             }
@@ -253,7 +253,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
     internal void AddNatifyInternal(INatifyAdapter adapter)
     {
         _natifySync?.Dispose();
-        _natifySync = new PubSubNatifySync<T>(adapter, this);
+        _natifySync = new PubSubNatifySync(adapter, this);
         _channel.AfterBatchEnter = _natifySync.OnBatchEnter;
         _channel.AfterBatchLeave = _natifySync.OnBatchLeave;
         _channel.AfterSyncEnter = _natifySync.OnSyncEnter;
@@ -276,60 +276,60 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         });
     }
 
-    public void OnUnitEnter<TUnit>(Action<(List<long> notyWatchIds, IUnit<TUnit> units)> callBack) where TUnit : class
+    public void OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack)
     {
-        _channel.OnUnitEnterBatch = (Action<(List<long>, IUnit<T>)>)(object)callBack;
+        _channel.OnUnitEnterBatch = callBack;
     }
 
-    public void OnUnitLeave<TUnit>(Action<(List<long> notyWatchIds, IUnit<TUnit> units)> callBack) where TUnit : class
+    public void OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack)
     {
-        _channel.OnUnitLeaveBatch = (Action<(List<long>, IUnit<T>)>)(object)callBack;
+        _channel.OnUnitLeaveBatch = callBack;
     }
 
-    public void OnUnitEnter<TUnit>(Action<(long notyWatchId, List<IUnit<TUnit>> units)> callBack) where TUnit : class
+    public void OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack)
     {
-        _channel.OnUnitEnterSync = (Action<(long, List<IUnit<T>>)>)(object)callBack;
+        _channel.OnUnitEnterSync = callBack;
     }
 
-    public void OnUnitLeave<TUnit>(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack) where TUnit : class
+    public void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack)
     {
         _channel.OnUnitLeaveSync = callBack;
     }
 
-    public void OnUnitEvent<TUnit>(Action<(List<long> notyWatchId, IUnit<TUnit> units, string eventName, object data)> callBack) where TUnit : class
+    public void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data)> callBack)
     {
-        _channel.OnUnitEvent = (Action<(List<long>, IUnit<T>, string, object)>)(object)callBack;
+        _channel.OnUnitEvent = callBack;
     }
 
     // ===== IPubSubInternal =====
 
-    void IPubSubInternal.OnUnitPositionChanged<TUnit>(Unit<TUnit> unit)
+    void IPubSubInternal.OnUnitPositionChanged(Unit unit)
     {
         _channel.Enqueue(() => HandlePositionChanged(unit));
     }
 
-    void IPubSubInternal.OnUnitDestroyed<TUnit>(Unit<TUnit> unit)
+    void IPubSubInternal.OnUnitDestroyed(Unit unit)
     {
         _channel.Enqueue(() => RemoveUnitInternal(unit));
     }
 
-    void IPubSubInternal.PublishEvent<TUnit>(Unit<TUnit> unit, string eventName, object? data)
+    void IPubSubInternal.PublishEvent(Unit unit, string eventName, object? data)
     {
         _channel.Enqueue(() =>
         {
             var watcherIds = GetWatchersInCell(unit.CurrentCellId);
             if (watcherIds.Length > 0)
-                FireUnitEvent(watcherIds, (IUnit<T>)(object)unit, eventName, data);
+                FireUnitEvent(watcherIds, unit, eventName, data);
         });
     }
 
-    internal Unit<T>? TryResolveAlive(UnitKey key)
+    internal Unit? TryResolveAlive(UnitKey key)
     {
         if (_units.TryGetValue(key, out var unit) && unit != null)
         {
             if (unit.IsAlive)
                 return unit;
-            RemoveUnitInternal<T>(unit);
+            RemoveUnitInternal(unit);
         }
         return null;
     }
@@ -364,13 +364,13 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
     // ===== Private helpers =====
 
-    private void AddUnitInternal<TUnit>(IUnit<TUnit> unit) where TUnit : class
+    private void AddUnitInternal(IUnit unit)
     {
-        var u = (Unit<TUnit>)unit;
+        var u = (Unit)unit;
         u.PubSub = this;
 
         var key = new UnitKey(u.Id, u.Type);
-        _units[key] = (Unit<T>)(object)u;
+        _units[key] = u;
 
         var cellId = SubC.GetGridCellByPosition(u.Position, _config_GridSize);
         u.CurrentCellId = cellId;
@@ -380,12 +380,12 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
 
         var watcherIds = cell.Watchers;
         if (watcherIds.Length > 0)
-            FireBatchEnter(watcherIds, (IUnit<T>)(object)u);
+            FireBatchEnter(watcherIds, u);
     }
 
-    private void RemoveUnitInternal<TUnit>(IUnit<TUnit> unit) where TUnit : class
+    private void RemoveUnitInternal(IUnit unit)
     {
-        var u = (Unit<TUnit>)unit;
+        var u = (Unit)unit;
         var key = new UnitKey(u.Id, u.Type);
 
         if (!string.IsNullOrEmpty(u.CurrentCellId))
@@ -396,7 +396,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
                 cell.RemoveUnit(key);
 
                 if (watcherIds.Length > 0)
-                    FireBatchLeave(watcherIds, (IUnit<T>)(object)u);
+                    FireBatchLeave(watcherIds, u);
             }
         }
 
@@ -420,7 +420,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         _watcherExpirations.Remove(watcherId);
     }
 
-    private void HandlePositionChanged<TUnit>(Unit<TUnit> unit) where TUnit : class
+    private void HandlePositionChanged(Unit unit)
     {
         var oldCellId = unit.CurrentCellId;
         var newCellId = SubC.GetGridCellByPosition(unit.Position, _config_GridSize);
@@ -447,15 +447,15 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         newCell.AddUnit(key);
 
         if (exitedWatchers.Length > 0)
-            FireBatchLeave(exitedWatchers, (IUnit<T>)(object)unit);
+            FireBatchLeave(exitedWatchers, unit);
 
         if (enteredWatchers.Length > 0)
-            FireBatchEnter(enteredWatchers, (IUnit<T>)(object)unit);
+            FireBatchEnter(enteredWatchers, unit);
     }
 
     private void ResolveAndFireSyncEnter(long watcherId, UnitKey[] unitKeys)
     {
-        var units = ListPool<IUnit<T>>.Rent();
+        var units = ListPool<IUnit>.Rent();
         try
         {
             foreach (var key in unitKeys)
@@ -469,13 +469,13 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         }
         finally
         {
-            ListPool<IUnit<T>>.Return(units);
+            ListPool<IUnit>.Return(units);
         }
     }
 
-    // ===== Fire* helpers — invoke callbacks directly (called from worker thread) =====
+    // ===== Fire* helpers =====
 
-    private void FireBatchEnter(long[] watcherIds, IUnit<T> unit)
+    private void FireBatchEnter(long[] watcherIds, IUnit unit)
     {
         if (watcherIds.Length == 0) return;
         var cb = _channel.OnUnitEnterBatch;
@@ -492,7 +492,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         finally { ListPool<long>.Return(list); }
     }
 
-    private void FireBatchLeave(long[] watcherIds, IUnit<T> unit)
+    private void FireBatchLeave(long[] watcherIds, IUnit unit)
     {
         if (watcherIds.Length == 0) return;
         var cb = _channel.OnUnitLeaveBatch;
@@ -509,7 +509,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         finally { ListPool<long>.Return(list); }
     }
 
-    private void FireSyncEnter(long watcherId, List<IUnit<T>> units)
+    private void FireSyncEnter(long watcherId, List<IUnit> units)
     {
         if (units.Count == 0) return;
         var cb = _channel.OnUnitEnterSync;
@@ -536,7 +536,7 @@ internal sealed class PubSub<T> : IPubSub, IPubSubInternal where T : class
         finally { ListPool<UnitKey>.Return(list); }
     }
 
-    private void FireUnitEvent(long[] watcherIds, IUnit<T> unit, string eventName, object? data)
+    private void FireUnitEvent(long[] watcherIds, IUnit unit, string eventName, object? data)
     {
         if (watcherIds.Length == 0) return;
         var cb = _channel.OnUnitEvent;

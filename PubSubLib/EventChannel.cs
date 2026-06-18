@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace PubSubLib;
 
-internal sealed class EventChannel<T> : IDisposable where T : class
+internal sealed class EventChannel : IDisposable
 {
     private readonly Channel<Action> _channel;
     private readonly ChannelWriter<Action> _writer;
@@ -10,17 +10,17 @@ internal sealed class EventChannel<T> : IDisposable where T : class
     private readonly Thread _worker;
     private readonly CancellationTokenSource _cts;
 
-    internal Action<(List<long>, IUnit<T>)>? OnUnitEnterBatch;
-    internal Action<(List<long>, IUnit<T>)>? OnUnitLeaveBatch;
-    internal Action<(long, List<IUnit<T>>)>? OnUnitEnterSync;
+    internal Action<(List<long>, IUnit)>? OnUnitEnterBatch;
+    internal Action<(List<long>, IUnit)>? OnUnitLeaveBatch;
+    internal Action<(long, List<IUnit>)>? OnUnitEnterSync;
     internal Action<(long, List<UnitKey>)>? OnUnitLeaveSync;
-    internal Action<(List<long>, IUnit<T>, string, object)>? OnUnitEvent;
+    internal Action<(List<long>, IUnit, string, object)>? OnUnitEvent;
 
-    internal Action<IUnit<T>, List<long>>? AfterBatchEnter;
-    internal Action<IUnit<T>, List<long>>? AfterBatchLeave;
-    internal Action<long, List<IUnit<T>>>? AfterSyncEnter;
+    internal Action<IUnit, List<long>>? AfterBatchEnter;
+    internal Action<IUnit, List<long>>? AfterBatchLeave;
+    internal Action<long, List<IUnit>>? AfterSyncEnter;
     internal Action<long, List<UnitKey>>? AfterSyncLeave;
-    internal Action<IUnit<T>, List<long>, string, object?>? AfterUnitEvent;
+    internal Action<IUnit, List<long>, string, object?>? AfterUnitEvent;
 
     private Action _onIdleCheck = () => { };
 

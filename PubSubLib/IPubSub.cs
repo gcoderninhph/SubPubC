@@ -4,13 +4,13 @@ namespace PubSubLib;
 
 public interface IPubSub : IDisposable
 {
-    static IPubSub Create<T>(PubSubConfig config) where T : class
+    static IPubSub Create(PubSubConfig config)
     {
-        return PubSub<T>.Create(config);
+        return PubSub.Create(config);
     }
 
-    void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit<T>> onCreated, byte[]? data = null) where T : class;
-    Task<IUnit<T>> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class;
+    void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class;
+    Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class;
     Task FlushAsync();
 
     void AddWatcher(long watcherId, Vector2 position, float radius);
@@ -21,18 +21,18 @@ public interface IPubSub : IDisposable
     void AddNatify(NatifyClientFast client);
     void AddNatify(NatifyClient client);
 
-    void OnUnitEnter<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> callBack) where T : class;
-    void OnUnitLeave<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> callBack) where T : class;
+    void OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack);
+    void OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack);
 
-    void OnUnitEnter<T>(Action<(long notyWatchId, List<IUnit<T>> units)> callBack) where T : class;
-    void OnUnitLeave<T>(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack) where T : class;
+    void OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack);
+    void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack);
 
-    void OnUnitEvent<T>(Action<(List<long> notyWatchId, IUnit<T> units, string eventName, object data)> callBack) where T : class;
+    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data)> callBack);
 }
 
 internal interface IPubSubInternal
 {
-    void OnUnitPositionChanged<T>(Unit<T> unit) where T : class;
-    void OnUnitDestroyed<T>(Unit<T> unit) where T : class;
-    void PublishEvent<T>(Unit<T> unit, string eventName, object? data) where T : class;
+    void OnUnitPositionChanged(Unit unit);
+    void OnUnitDestroyed(Unit unit);
+    void PublishEvent(Unit unit, string eventName, object? data);
 }
