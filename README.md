@@ -12,7 +12,7 @@ Spatial Pub/Sub library for game servers written in .NET. Tracks entities (**Uni
 - [Quick Start (Networked via Natify)](#quick-start-networked-via-natify)
 - [API Reference](#api-reference)
   - [IPubSub](#ipubsub)
-  - [IUnit\<T\>](#iunitt)
+  - [IUnit](#iunit)
   - [IPubSubNatifyClient](#ipubsubnatifyclient)
 - [Event Model](#event-model)
   - [BatchEnter / BatchLeave](#batchenter--batchleave)
@@ -82,27 +82,27 @@ Or use a project reference:
 ```csharp
 using PubSubLib;
 
-// 1. Create the PubSub instance (generic type = your game object type)
-var pubSub = IPubSub.Create<Player>(new PubSubConfig
+// 1. Create the PubSub instance
+var pubSub = IPubSub.Create(new PubSubConfig
 {
     GridSize = 100f  // each grid cell is 100x100 units
 });
 
 // 2. Register callbacks for events you care about
-pubSub.OnUnitEnter<Player>(tuple =>
+pubSub.OnUnitEnter(tuple =>
 {
     var watcherIds = tuple.Item1; // List<long> — which watchers are notified
-    var unit       = tuple.Item2; // IUnit<Player>
+    var unit       = tuple.Item2; // IUnit
     Console.WriteLine($"[BatchEnter] Unit {unit.Id} entered range of watchers [{string.Join(",", watcherIds)}]");
 });
 
-pubSub.OnUnitLeave<Player>(tuple =>
+pubSub.OnUnitLeave(tuple =>
 {
     var unitKeys    = tuple.Item2; // List<UnitKey> — which units left
     Console.WriteLine($"[SyncLeave] Watcher {tuple.Item1} lost [{string.Join(",", unitKeys)}]");
 });
 
-pubSub.OnUnitEvent<Player>(tuple =>
+pubSub.OnUnitEvent(tuple =>
 {
     Console.WriteLine($"[UnitEvent] {tuple.Item2.Type}:{tuple.Item2.Id} emitted '{tuple.Item3}' with data {tuple.Item4}");
 });
@@ -149,7 +149,7 @@ You do **not** need to flush after every single call. Flush is primarily for syn
 ```csharp
 pubSub.CreateUnit<Player>(id, type, position, target, onCreated: unit =>
 {
-    // unit is IUnit<Player>, fully registered in the grid
+    // unit is IUnit, fully registered in the grid
     // Note: this callback runs on the worker thread
 });
 ```
@@ -178,7 +178,7 @@ var natifyClient = new NatifyClientFast("nats://localhost:4222",
     "PubSubServer", "ServerGroup", "VN", "Router");
 
 // Create PubSub and attach Natify
-var pubSub = IPubSub.Create<Player>(new PubSubConfig { GridSize = 100f });
+var pubSub = IPubSub.Create(new PubSubConfig { GridSize = 100f });
 pubSub.AddNatify(natifyClient);
 
 // Now any BatchEnter/SyncEnter/UnitEvent emitted by the server
@@ -260,12 +260,12 @@ client.Dispose();
 public interface IPubSub : IDisposable
 {
     // ── Factory ──
-    static IPubSub Create<T>(PubSubConfig config) where T : class;
+    static IPubSub Create(PubSubConfig config);
 
     // ── Unit lifecycle ──
     void CreateUnit<T>(long id, string type, Vector2 position, T target,
-        Action<IUnit<T>> onCreated, byte[]? data = null) where T : class;
-    Task<IUnit<T>> CreateUnitAsync<T>(long id, string type, Vector2 position,
+        Action<IUnit> onCreated, byte[]? data = null) where T : class;
+    Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position,
         T target, byte[]? data = null) where T : class;
     Task FlushAsync();
 
@@ -275,24 +275,24 @@ public interface IPubSub : IDisposable
     void MoveWatcher(long watcherId, Vector2 position, float radius);
 
     // ── State reconciliation ──
-    void WatcherPingUnits(long watcherId, string unitType,
-        Dictionary<UnitKey, int> unitVersions);
+    void WatcherPingUnits(long watcherId,
+        Dictionary<string, Dictionary<long, int>> typeVersions);
 
     // ── Natify integration ──
     void AddNatify(NatifyClientFast client);
     void AddNatify(NatifyClient client);
 
     // ── Batch callbacks (instant enter/leave) ──
-    void OnUnitEnter<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> cb) where T : class;
-    void OnUnitLeave<T>(Action<(List<long> notyWatchIds, IUnit<T> units)> cb) where T : class;
+    void OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> cb);
+    void OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> cb);
 
     // ── Sync callbacks (initial state / reconciliation) ──
-    void OnUnitEnter<T>(Action<(long watcherId, List<IUnit<T>> units)> cb) where T : class;
-    void OnUnitLeave<T>(Action<(long watcherId, List<UnitKey> unitKeys)> cb) where T : class;
+    void OnUnitEnter(Action<(long watcherId, List<IUnit> units)> cb);
+    void OnUnitLeave(Action<(long watcherId, List<UnitKey> unitKeys)> cb);
 
     // ── Event callback ──
-    void OnUnitEvent<T>(Action<(List<long> watcherIds, IUnit<T> unit,
-        string eventName, object data)> cb) where T : class;
+    void OnUnitEvent(Action<(List<long> watcherIds, IUnit unit,
+        string eventName, object data)> cb);
 }
 ```
 
@@ -311,17 +311,16 @@ public class PubSubConfig
 - **WatcherTimeoutSeconds**: If `WatcherPingUnits` is not called for a watcher within this interval, the watcher is automatically removed. Default 5 seconds.
 - **WatcherCleanupIntervalSeconds**: Expired watchers are checked and removed at this interval during the idle phase of the worker loop. Default 2 seconds.
 
-### IUnit\<T\>
+### IUnit
 
 ```csharp
-public interface IUnit<T> where T : class
+public interface IUnit
 {
     long Id { get; }                        // unique ID
     string Type { get; }                    // unit type (e.g. "hero", "mob", "item")
     Vector2 Position { get; set; }          // 2D position — setting it triggers grid cell update + version bump
-    WeakReference<T> WeakReference { get; } // weak reference to your target object
     bool IsAlive { get; }                   // false if GC collected the target
-    T? Target { get; }                      // resolved target (null if collected)
+    object? Target { get; }                 // resolved target (null if collected)
     int Version { get; }                    // incremented on Position set or Data set
     byte[]? Data { get; set; }              // binary payload — setting it bumps version
     void PublishEvent(string eventName, object? data); // emit event to all covering watchers
@@ -347,7 +346,7 @@ public readonly struct UnitKey : IEquatable<UnitKey>
 }
 ```
 
-`UnitKey` is used in `SyncLeave` callbacks and `WatcherPingUnits` to identify units by their composite key (Id + Type). Units of different types can share the same numeric Id.
+`UnitKey` is used in `SyncLeave` callbacks and internally by `WatcherPingUnits` to identify units by their composite key (Id + Type). Units of different types can share the same numeric Id.
 
 ---
 
@@ -391,13 +390,13 @@ SubPubC has five event types split into two categories:
 
 **Callback signature (Batch):**
 ```csharp
-(List<long> watcherIds, IUnit<T> unit)
+(List<long> watcherIds, IUnit unit)
 ```
 Multiple watchers can be notified in one call (e.g., if two watchers overlap).
 
 **Callback signature (SyncEnter):**
 ```csharp
-(long watcherId, List<IUnit<T>> units)
+(long watcherId, List<IUnit> units)
 ```
 Used when a watcher is added or moved — lists all units currently in range. Also used by `WatcherPingUnits` for reconciliation.
 
@@ -416,7 +415,7 @@ Companion to SyncEnter — sent when a watcher is moved away or `WatcherPingUnit
 
 **Callback signature:**
 ```csharp
-(List<long> watcherIds, IUnit<T> unit, string eventName, object data)
+(List<long> watcherIds, IUnit unit, string eventName, object data)
 ```
 
 ### Event Flow Diagram
@@ -490,7 +489,7 @@ cellY = floor(y / gridSize)
 
 ### Memory Management
 
-- Units hold a `WeakReference<T>` to your target object (e.g., `Player`).
+- Units hold a `WeakReference` to your target object (e.g., `Player`).
 - `IsAlive` returns `false` when the GC collects the target.
 - When `TryResolveAlive()` encounters a dead unit during any operation (ping, cell query), it automatically removes the unit from internal dictionaries and fires cleanup events.
 - **Best practice:** Call `unit.Destroy()` explicitly when removing entities. The `WeakReference` lazy cleanup is a safety net, not a primary removal mechanism.
@@ -518,7 +517,7 @@ Watchers must periodically call `WatcherPingUnits` to stay alive. If a watcher d
 
 **Example — ping keeps watcher alive:**
 ```csharp
-var pubSub = IPubSub.Create<Player>(new PubSubConfig
+var pubSub = IPubSub.Create(new PubSubConfig
 {
     WatcherTimeoutSeconds = 5,
     WatcherCleanupIntervalSeconds = 2
@@ -529,7 +528,7 @@ pubSub.AddWatcher(1, V(0, 0), 200f);
 // Ping every 3 seconds to keep watcher alive
 while (running)
 {
-    pubSub.WatcherPingUnits(1, "mob", new Dictionary<UnitKey, int>());
+    pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>>());
     await Task.Delay(3000);
 }
 // Watcher 1 stays alive. Any watcher that fails to ping for 5s is auto-removed.
@@ -603,7 +602,8 @@ dotnet test PubSubLibTest/PubSubLibTest.csproj
 ```
 
 Test categories:
-- **PubSubTests** (22 tests) — unit tests for local PubSub (create/dispose, batch enter/leave, sync enter/leave, move watcher, position change, ping, events, version tracking, lazy cleanup, worker resilience, watcher expiration)
+- **PubSubTests** (34 tests) — unit tests for local PubSub (create/dispose, batch enter/leave, sync enter/leave, move watcher, position change, ping, events, version tracking, lazy cleanup, worker resilience, watcher expiration)
+- **PubSubTestAll** (3 tests) — full-stack integration tests (basic create & sync, client kills unit → server re-syncs, server destroys unit → client receives destroy)
 - **PubSubNatifyProtoTests** (12 tests) — protobuf roundtrip tests for all message types
 - **PubSubNatifyTests** (9 tests) — outbound/inbound Natify sync tests (requires local NATS server)
 - **PubSubNatifyIntegrationTests** (3 tests) — end-to-end integration tests (requires local NATS server)
