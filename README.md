@@ -60,7 +60,8 @@ pubSub.OnUnitLeave(tuple =>
 // Unit event
 pubSub.OnUnitEvent(tuple =>
 {
-    Console.WriteLine($"[Event] {tuple.Item2.Type}:{tuple.Item2.Id} phát '{tuple.Item3}'");
+    var reliable = tuple.Item5;
+    Console.WriteLine($"[Event] {tuple.Item2.Type}:{tuple.Item2.Id} phát '{tuple.Item3}' reliable={reliable}");
 });
 
 // Thêm watcher
@@ -76,8 +77,10 @@ var unit = await pubSub.CreateUnitAsync<MyGameObject>(
 unit.Position = V(150, 150);
 await pubSub.FlushAsync(); // đợi worker xử lý xong
 
-// Phát sự kiện
+// Phát sự kiện (TCP — reliable=true mặc định)
 unit.PublishEvent("attack", new { damage = 50 });
+// Phát sự kiện qua UDP (reliable=false)
+unit.PublishEvent("bullet_fx", new { whoosh = 1 }, reliable: false);
 await pubSub.FlushAsync();
 
 // Hủy unit
@@ -208,6 +211,18 @@ public class HeroProvider : IProvider
     {
         // Hủy GameObject
         Console.WriteLine($"[Client] Hủy hero {unitId}");
+    }
+
+    public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+    {
+        if (meta.Transport == EventTransport.Udp)
+        {
+            // Xử lý event UDP (best-effort)
+        }
+        else
+        {
+            // Xử lý event TCP (reliable)
+        }
     }
 }
 ```

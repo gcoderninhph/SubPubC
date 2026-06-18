@@ -28,4 +28,10 @@ public interface IProvider
     void DestroyObject(long unitId, GameObjectTest obj);
 #endif
 
+#if UNITY_ENGINE
+    void OnEvent(long unitId, UnityEngine.GameObject obj, string eventName, byte[] data, EventMeta meta);
+#else
+    void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta);
+#endif
+
 }

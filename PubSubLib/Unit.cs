@@ -40,9 +40,9 @@ internal class Unit : IUnit
         }
     }
 
-    void IUnit.PublishEvent(string eventName, object? data)
+    void IUnit.PublishEvent(string eventName, object? data, bool reliable)
     {
-        PubSub?.PublishEvent(this, eventName, data);
+        PubSub?.PublishEvent(this, eventName, data, reliable);
     }
 
     public void Destroy()

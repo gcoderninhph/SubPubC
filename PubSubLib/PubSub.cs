@@ -270,7 +270,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         _channel.AfterUnitEvent = _natifySync.OnUnitEvent;
     }
 
-    internal void HandleNatifyPublishEvent(long unitId, string unitType, string eventName, byte[]? data)
+    internal void HandleNatifyPublishEvent(long unitId, string unitType, string eventName, byte[]? data, bool reliable)
     {
         _channel.Enqueue(() =>
         {
@@ -280,7 +280,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
             {
                 var watcherIds = GetWatchersInCell(unit.CurrentCellId);
                 if (watcherIds.Length > 0)
-                    FireUnitEvent(watcherIds, unit, eventName, data);
+                    FireUnitEvent(watcherIds, unit, eventName, data, reliable);
             }
         });
     }
@@ -305,7 +305,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         _channel.OnUnitLeaveSync = callBack;
     }
 
-    public void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data)> callBack)
+    public void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack)
     {
         _channel.OnUnitEvent = callBack;
     }
@@ -322,13 +322,13 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         _channel.Enqueue(() => RemoveUnitInternal(unit));
     }
 
-    void IPubSubInternal.PublishEvent(Unit unit, string eventName, object? data)
+    void IPubSubInternal.PublishEvent(Unit unit, string eventName, object? data, bool reliable)
     {
         _channel.Enqueue(() =>
         {
             var watcherIds = GetWatchersInCell(unit.CurrentCellId);
             if (watcherIds.Length > 0)
-                FireUnitEvent(watcherIds, unit, eventName, data);
+                FireUnitEvent(watcherIds, unit, eventName, data, reliable);
         });
     }
 
@@ -545,7 +545,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         finally { ListPool<UnitKey>.Return(list); }
     }
 
-    private void FireUnitEvent(long[] watcherIds, IUnit unit, string eventName, object? data)
+    private void FireUnitEvent(long[] watcherIds, IUnit unit, string eventName, object? data, bool reliable)
     {
         if (watcherIds.Length == 0) return;
         var cb = _channel.OnUnitEvent;
@@ -556,8 +556,8 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         list.AddRange(watcherIds);
         try
         {
-            if (cb != null) { try { cb.Invoke((list, unit, eventName, data!)); } catch { } }
-            if (after != null) { try { after.Invoke(unit, list, eventName, data); } catch { } }
+            if (cb != null) { try { cb.Invoke((list, unit, eventName, data!, reliable)); } catch { } }
+            if (after != null) { try { after.Invoke(unit, list, eventName, data, reliable); } catch { } }
         }
         finally { ListPool<long>.Return(list); }
     }

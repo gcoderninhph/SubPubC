@@ -27,12 +27,12 @@ public interface IPubSub : IDisposable
     void OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack);
     void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack);
 
-    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data)> callBack);
+    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack);
 }
 
 internal interface IPubSubInternal
 {
     void OnUnitPositionChanged(Unit unit);
     void OnUnitDestroyed(Unit unit);
-    void PublishEvent(Unit unit, string eventName, object? data);
+    void PublishEvent(Unit unit, string eventName, object? data, bool reliable);
 }

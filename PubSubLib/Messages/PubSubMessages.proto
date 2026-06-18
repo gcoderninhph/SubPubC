@@ -66,6 +66,7 @@ message UnitEventMsg {
     string unit_type = 3;
     string event_name = 4;
     bytes data = 5;
+    bool use_udp = 6;
 }
 
 // ===== Inbound (Client -> Server) =====
@@ -109,4 +110,5 @@ message PublishEventCmd {
     string unit_type = 2;
     string event_name = 3;
     bytes data = 4;
+    bool use_udp = 5;
 }

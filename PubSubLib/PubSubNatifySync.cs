@@ -79,7 +79,7 @@ internal sealed class PubSubNatifySync : IDisposable
     private void HandlePublishEvent(PublishEventCmd cmd)
     {
         _pubSub.HandleNatifyPublishEvent(cmd.UnitId, cmd.UnitType, cmd.EventName,
-            cmd.Data != null ? cmd.Data.ToByteArray() : null);
+            cmd.Data != null ? cmd.Data.ToByteArray() : null, !cmd.UseUdp);
     }
 
     // ===== Outbound =====
@@ -151,14 +151,15 @@ internal sealed class PubSubNatifySync : IDisposable
         _natify.Publish(EvtTopic, new PubSubEvent { SyncLeave = msg });
     }
 
-    public void OnUnitEvent(IUnit unit, List<long> watcherIds, string eventName, object? data)
+    public void OnUnitEvent(IUnit unit, List<long> watcherIds, string eventName, object? data, bool reliable)
     {
         var msg = new UnitEventMsg
         {
             UnitId = unit.Id,
             UnitType = unit.Type,
             EventName = eventName,
-            Data = data is byte[] b ? ByteString.CopyFrom(b) : ByteString.Empty
+            Data = data is byte[] b ? ByteString.CopyFrom(b) : ByteString.Empty,
+            UseUdp = !reliable
         };
         msg.WatcherIds.AddRange(watcherIds);
 

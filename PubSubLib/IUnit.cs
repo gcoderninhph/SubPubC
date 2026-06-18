@@ -9,6 +9,6 @@ public interface IUnit
     object? Target { get; }
     int Version { get; }
     byte[]? Data { get; set; }
-    void PublishEvent(string eventName, object? data);
+    void PublishEvent(string eventName, object? data, bool reliable = true);
     void Destroy();
 }

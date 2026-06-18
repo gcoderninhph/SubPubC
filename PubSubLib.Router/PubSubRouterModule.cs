@@ -130,7 +130,12 @@ internal sealed class PubSubRouterModule : IPubSubRouterModule
         foreach (var watcherId in msg.WatcherIds)
         {
             if (_connections.TryGetValue(watcherId, out var conn) && conn.Connected)
-                _server.SendOnTcp("PubSub.Evt", conn, new PubSubEvent { UnitEvent = msg });
+            {
+                if (!msg.UseUdp)
+                    _server.SendOnTcp("PubSub.Evt", conn, new PubSubEvent { UnitEvent = msg });
+                else
+                    _server.SendOnUdp("PubSub.Evt", conn, new PubSubEvent { UnitEvent = msg });
+            }
         }
     }
 }

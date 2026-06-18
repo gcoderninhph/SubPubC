@@ -537,7 +537,7 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            Action<(List<long>, IUnit, string, object)> cb = tuple =>
+            Action<(List<long>, IUnit, string, object, bool)> cb = tuple =>
             {
                 watcherIds = new List<long>(tuple.Item1);
                 unit = tuple.Item2;
@@ -560,6 +560,56 @@ public class PubSubTests
             Assert.Contains(1L, watcherIds);
             Assert.Equal("attack", eventName);
             Assert.NotNull(data);
+        }
+        finally { pubSub.Dispose();         }
+    }
+
+    [Fact]
+    public async Task PublishEvent_TcpAndUdp()
+    {
+        var signal = new ManualResetEventSlim();
+        int eventsReceived = 0;
+        (List<long>, IUnit, string, object, bool)? tcpResult = null;
+        (List<long>, IUnit, string, object, bool)? udpResult = null;
+
+        var pubSub = CreatePubSub();
+        try
+        {
+            Action<(List<long>, IUnit, string, object, bool)> cb = tuple =>
+            {
+                if (tuple.Item5)
+                    tcpResult = tuple;
+                else
+                    udpResult = tuple;
+
+                if (Interlocked.Increment(ref eventsReceived) >= 2)
+                    signal.Set();
+            };
+            pubSub.OnUnitEvent(cb);
+
+            pubSub.AddWatcher(1, V(0, 0), 200);
+
+            var player1 = new Player();
+            var player2 = new Player();
+            var u1 = await pubSub.CreateUnitAsync<Player>(11, "hero", V(30, 30), player1);
+            var u2 = await pubSub.CreateUnitAsync<Player>(12, "mob", V(50, 50), player2);
+
+            u1.PublishEvent("tcp_evt", new byte[] { 1 }, reliable: true);
+            u2.PublishEvent("udp_evt", new byte[] { 2 }, reliable: false);
+            await pubSub.FlushAsync();
+
+            Assert.True(signal.Wait(5000));
+            Assert.Equal(2, eventsReceived);
+
+            Assert.NotNull(tcpResult);
+            Assert.Equal("tcp_evt", tcpResult.Value.Item3);
+            Assert.True(tcpResult.Value.Item5);
+            Assert.Equal(11, tcpResult.Value.Item2.Id);
+
+            Assert.NotNull(udpResult);
+            Assert.Equal("udp_evt", udpResult.Value.Item3);
+            Assert.False(udpResult.Value.Item5);
+            Assert.Equal(12, udpResult.Value.Item2.Id);
         }
         finally { pubSub.Dispose(); }
     }

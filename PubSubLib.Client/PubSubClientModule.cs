@@ -15,10 +15,11 @@ internal sealed class PubSubClientModule : IPubSubClientModule
     public void SetIClient(IClient client)
     {
         _pubSubClient.SetClient(client);
-        client.SubscribeTcp<PubSubEvent>("PubSub.Evt", OnEvent);
+        client.SubscribeTcp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Tcp));
+        client.SubscribeUdp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Udp));
     }
 
-    private void OnEvent(PubSubEvent evt)
+    private void OnEvent(PubSubEvent evt, EventTransport transport)
     {
         switch (evt.EvtCase)
         {
@@ -35,7 +36,7 @@ internal sealed class PubSubClientModule : IPubSubClientModule
                 _pubSubClient.HandleSyncLeave(evt.SyncLeave);
                 break;
             case PubSubEvent.EvtOneofCase.UnitEvent:
-                _pubSubClient.HandleUnitEvent(evt.UnitEvent);
+                _pubSubClient.HandleUnitEvent(evt.UnitEvent, transport);
                 break;
         }
     }

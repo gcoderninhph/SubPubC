@@ -14,13 +14,13 @@ internal sealed class EventChannel : IDisposable
     internal Action<(List<long>, IUnit)>? OnUnitLeaveBatch;
     internal Action<(long, List<IUnit>)>? OnUnitEnterSync;
     internal Action<(long, List<UnitKey>)>? OnUnitLeaveSync;
-    internal Action<(List<long>, IUnit, string, object)>? OnUnitEvent;
+    internal Action<(List<long>, IUnit, string, object, bool)>? OnUnitEvent;
 
     internal Action<IUnit, List<long>>? AfterBatchEnter;
     internal Action<IUnit, List<long>>? AfterBatchLeave;
     internal Action<long, List<IUnit>>? AfterSyncEnter;
     internal Action<long, List<UnitKey>>? AfterSyncLeave;
-    internal Action<IUnit, List<long>, string, object?>? AfterUnitEvent;
+    internal Action<IUnit, List<long>, string, object?, bool>? AfterUnitEvent;
 
     private Action _onIdleCheck = () => { };
 

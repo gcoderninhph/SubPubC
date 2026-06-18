@@ -155,8 +155,26 @@ internal sealed class PubSubClient : IPubSubClient
         }
     }
 
-    internal void HandleUnitEvent(UnitEventMsg msg)
+    internal void HandleUnitEvent(UnitEventMsg msg, EventTransport transport = EventTransport.Tcp)
     {
+        if (!_providers.TryGetValue(msg.UnitType, out var provider))
+            return;
+
+        var key = (msg.UnitId, msg.UnitType);
+        if (!_units.TryGetValue(key, out var unit))
+            return;
+
+        if (unit.Target is { } target)
+        {
+            var meta = new EventMeta(transport);
+#if UNITY_ENGINE
+            if (target is UnityEngine.GameObject go)
+                provider.OnEvent(msg.UnitId, go, msg.EventName, msg.Data.ToByteArray(), meta);
+#else
+            if (target is GameObjectTest go)
+                provider.OnEvent(msg.UnitId, go, msg.EventName, msg.Data.ToByteArray(), meta);
+#endif
+        }
     }
 
     private void CleanDeadUnits()

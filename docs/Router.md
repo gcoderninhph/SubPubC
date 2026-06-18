@@ -259,25 +259,35 @@ NATS PubSub.Evt ──────► IPubSubNatifyClient callbacks
                             │
                             ▼ switch msg type
                         ┌───────────────────────────────────────────────────┐
-                        │ BatchEnterMsg / BatchLeaveMsg / UnitEventMsg      │
-                        │   → foreach watcherId in msg.WatcherIds           │
-                        │       → if _connections.TryGetValue(watcherId)    │
-                        │       → if conn.Connected                         │
+                        │ BatchEnterMsg / BatchLeaveMsg                   │
+                        │   → foreach watcherId in msg.WatcherIds        │
+                        │       → if _connections.TryGetValue(watcherId) │
+                        │       → if conn.Connected                      │
                         │       → _server.SendOnTcp("PubSub.Evt", conn, evt)│
-                        │                                                   │
-                        │ SyncEnterMsg / SyncLeaveMsg                       │
-                        │   → watcherId = msg.WatcherId (đơn lẻ)            │
-                        │   → if _connections.TryGetValue(watcherId)        │
-                        │   → if conn.Connected                             │
-                        │   → _server.SendOnTcp("PubSub.Evt", conn, evt)    │
+                        │                                                │
+                        │ UnitEventMsg                                   │
+                        │   → foreach watcherId in msg.WatcherIds        │
+                        │       → if _connections.TryGetValue(watcherId) │
+                        │       → if conn.Connected                      │
+                        │       → if msg.UseUdp:                         │
+                        │           _server.SendOnUdp("PubSub.Evt", conn, evt)│
+                        │         else:                                  │
+                        │           _server.SendOnTcp("PubSub.Evt", conn, evt)│
+                        │                                                │
+                        │ SyncEnterMsg / SyncLeaveMsg                    │
+                        │   → watcherId = msg.WatcherId (đơn lẻ)         │
+                        │   → if _connections.TryGetValue(watcherId)     │
+                        │   → if conn.Connected                          │
+                        │   → _server.SendOnTcp("PubSub.Evt", conn, evt) │
                         └───────────────────────────────────────────────────┘
                             │
                             ▼ TCP "PubSub.Evt" ──────► Client
 ```
 
 **Demux logic:**
-- `BatchEnter`/`BatchLeave`/`UnitEvent`: message chứa `repeated watcher_ids` — duyệt từng watcherId, tìm connection tương ứng, gửi qua TCP
-- `SyncEnter`/`SyncLeave`: message chứa 1 `watcherId` duy nhất — gửi trực tiếp đến connection đó
+- `BatchEnter`/`BatchLeave`: message chứa `repeated watcher_ids` — duyệt từng watcherId, tìm connection, gửi qua **TCP**
+- `UnitEvent`: message chứa `repeated watcher_ids`. Nếu `msg.UseUdp == true` → gửi qua **UDP** (best-effort), ngược lại gửi qua **TCP** (reliable)
+- `SyncEnter`/`SyncLeave`: message chứa 1 `watcherId` duy nhất — gửi trực tiếp qua **TCP**
 
 ---
 

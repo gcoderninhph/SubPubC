@@ -116,7 +116,7 @@ public interface IPubSub : IDisposable
     void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack);
 
     // ── Event callback ──
-    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data)> callBack);
+    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack);
 }
 ```
 
@@ -158,7 +158,7 @@ public interface IUnit
     object? Target { get; }       // target object (null nếu bị collect)
     int Version { get; }          // tăng khi Position hoặc Data thay đổi
     byte[]? Data { get; set; }    // binary payload — set trigger tăng version
-    void PublishEvent(string eventName, object? data); // phát event tới mọi watcher đang quan sát
+    void PublishEvent(string eventName, object? data, bool reliable = true); // phát event tới mọi watcher đang quan sát. reliable=true → TCP, reliable=false → UDP
     void Destroy();               // xóa unit khỏi grid, fire leave event
 }
 ```
@@ -208,7 +208,7 @@ pubSub.OnUnitLeave(tuple => {
 });
 
 pubSub.OnUnitEvent(tuple => {
-    Console.WriteLine($"[Event] {tuple.Item2.Id} phát '{tuple.Item3}'");
+    Console.WriteLine($"[Event] {tuple.Item2.Id} phát '{tuple.Item3}' reliable={tuple.Item5}");
 });
 
 // Thêm watcher
@@ -222,7 +222,8 @@ var unit = await pubSub.CreateUnitAsync<Player>(42, "hero", new Vector2 { x = 50
 unit.Position = new Vector2 { x = 150, y = 150 };
 
 // Event
-unit.PublishEvent("attack", new { damage = 50 });
+unit.PublishEvent("attack", new { damage = 50 });          // TCP (reliable=true)
+unit.PublishEvent("bullet_fx", data, reliable: false);      // UDP (best-effort)
 
 // Đồng bộ
 pubSub.WatcherPingUnits(1, new Dictionary<string, Dictionary<long, int>>
@@ -423,7 +424,13 @@ Mỗi cell chứa:
 #### UnitEvent
 
 **Khi nào fire:**
-- `unit.PublishEvent("eventName", data)` — forward tới mọi watcher trong cell chứa unit
+- `unit.PublishEvent("eventName", data, reliable)` — forward tới mọi watcher trong cell chứa unit
+
+**Tham số `reliable`:**
+| Giá trị | Transport | Ý nghĩa |
+|---------|-----------|---------|
+| `true` (mặc định) | TCP | Đảm bảo delivery, dùng cho logic game quan trọng (attack, damage, state change) |
+| `false` | UDP | Best-effort, dùng cho hiệu ứng không quan trọng (FX, animation trigger, positional update nhanh) |
 
 ### Version Tracking
 

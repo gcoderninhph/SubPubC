@@ -85,10 +85,10 @@ public class PubSubTestAll : IDisposable
         Thread.Sleep(2000);
     }
 
-    private async Task CreateUnit(long unitId, Vector2 position)
+    private async Task<PubSubLib.IUnit> CreateUnit(long unitId, Vector2 position)
     {
         serverUnit[unitId] = new MyUnit();
-        await _pubSub.CreateUnitAsync(unitId, "T1", position, serverUnit[unitId]);
+        return await _pubSub.CreateUnitAsync(unitId, "T1", position, serverUnit[unitId]);
     }
 
     private void DestroyUnit(long unitId)
@@ -179,6 +179,127 @@ public class PubSubTestAll : IDisposable
     }
 
     [Fact]
+    public async Task FullStack_MoveWatcher_EntersNewUnit_LeavesOldUnit()
+    {
+        clientUnit.Clear();
+        serverUnit.Clear();
+
+        var unit1Id = 1L;
+        var unit2Id = 2L;
+        var unit1Created = new ManualResetEventSlim();
+        var unit2Entered = new ManualResetEventSlim();
+        var unit1Left = new ManualResetEventSlim();
+
+        CreateRouter();
+        await CreateUnityServer();
+        await CreateUnityClient("test", unit1Id);
+
+        var provider = new MoveWatcherProvider
+        {
+            Unit1Created = unit1Created,
+            Unit2Entered = unit2Entered,
+            Unit1Left = unit1Left,
+            Unit1Id = unit1Id,
+            Unit2Id = unit2Id
+        };
+        _pubSubClientModule.Get().AddProvider(provider);
+
+        await Task.Delay(2000);
+
+        // Stage 1: create unit1 at (50,50) → in watcher's cell "0:0" → BatchEnter
+        await CreateUnit(unit1Id, V(50, 50));
+        Assert.True(unit1Created.Wait(5000), "Stage 1 failed: unit1 did not enter");
+        Assert.True(clientUnit.ContainsKey(unit1Id));
+
+        // Stage 2: create unit2 at (500,500) → outside range, no event yet
+        await CreateUnit(unit2Id, V(500, 500));
+
+        // Run ticks so watcher registers "T1" as known type
+        using (var cts = new CancellationTokenSource())
+        {
+            _ = RunTickLoop(cts.Token);
+            await Task.Delay(1500);
+        }
+
+        // Stage 3: move watcher to unit2's position → SyncEnter unit2 + SyncLeave unit1
+        _pubSubClientModule.Get().MoveWatcher(new PubSubLib.Client.Vector2 { x = 500, y = 500 }, 100);
+
+        Assert.True(unit2Entered.Wait(15000), "Stage 3 failed: unit2 did not enter after MoveWatcher");
+        Assert.True(unit1Left.Wait(15000), "Stage 3 failed: unit1 did not leave after MoveWatcher");
+
+        Assert.True(clientUnit.ContainsKey(unit2Id));
+        Assert.False(clientUnit.ContainsKey(unit1Id));
+    }
+
+    [Fact]
+    public async Task FullStack_UnitPublishesEvent_TwoClientsReceive()
+    {
+        clientUnit.Clear();
+        serverUnit.Clear();
+
+        var unitId = 10L;
+        var client1Created = new ManualResetEventSlim();
+        var client2Created = new ManualResetEventSlim();
+        var client1Event = new ManualResetEventSlim();
+        var client2Event = new ManualResetEventSlim();
+
+        CreateRouter();
+        await CreateUnityServer();
+
+        // Client 1 (via helper)
+        await CreateUnityClient("player1", 1);
+        var provider1 = new EventProvider { CreatedSignal = client1Created, EventSignal = client1Event, ExpectedUnitId = unitId };
+        _pubSubClientModule.Get().AddProvider(provider1);
+
+        // Client 2 (inline — same router, different watcherId)
+        var client2 = IClient.Create(new ClientConfig
+        {
+            tcpServer = "127.0.0.1:9090",
+            websocketEnpoint = "/ws",
+            restEndpoint = "/api",
+            restCompressedEnable = true,
+            tcpSecurity = false,
+            udpServer = "127.0.0.1:9091",
+            udpPingIntervalMs = 5000,
+            udpPingTimeoutMs = 15000
+        });
+        var module2 = IPubSubClientModule.Create(new Config { PingIntervalMs = 300 });
+        var provider2 = new EventProvider { CreatedSignal = client2Created, EventSignal = client2Event, ExpectedUnitId = unitId };
+        module2.Get().AddProvider(provider2);
+        client2.AddModule(module2);
+        await client2.Login(() => new StringValue { Value = "player2_2" });
+        await client2.ConnectServer();
+
+        try
+        {
+            await Task.Delay(2000);
+
+            // Stage 1: create unit, both watchers are in cell "0:0" → both receive BatchEnter
+            var unit = await CreateUnit(unitId, V(50, 50));
+            Assert.True(client1Created.Wait(5000), "Stage 1 failed: client1 did not receive unit");
+            Assert.True(client2Created.Wait(5000), "Stage 1 failed: client2 did not receive unit");
+            Assert.True(clientUnit.ContainsKey(unitId));
+
+            // Run ticks so both watchers register "T1" as known type
+            using (var cts = new CancellationTokenSource())
+            {
+                _ = RunTickLoop(cts.Token);
+                _ = RunTickLoop(cts.Token, module2.Get());
+                await Task.Delay(1500);
+            }
+
+            // Stage 2: unit publishes event → both clients receive
+            unit.PublishEvent("attack", new byte[] { 1, 2, 3 });
+            Assert.True(client1Event.Wait(15000), "Stage 2 failed: client1 did not receive event");
+            Assert.True(client2Event.Wait(15000), "Stage 2 failed: client2 did not receive event");
+        }
+        finally
+        {
+            await client2.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task FullStack_ServerDestroysUnit_ClientReceivesDestroy()
     {
         clientUnit.Clear();
@@ -219,11 +340,12 @@ public class PubSubTestAll : IDisposable
         Assert.False(clientUnit.ContainsKey(unitId));
     }
 
-    private async Task RunTickLoop(CancellationToken ct)
+    private async Task RunTickLoop(CancellationToken ct, IPubSubClient? client = null)
     {
+        var c = client ?? _pubSubClientModule.Get();
         while (!ct.IsCancellationRequested)
         {
-            _pubSubClientModule.Get().Tick();
+            c.Tick();
             try { await Task.Delay(10, ct); } catch { break; }
         }
     }
@@ -246,6 +368,10 @@ public class PubSubTestAll : IDisposable
         public void DestroyObject(long unitId, GameObjectTest obj)
         {
             clientUnit.Remove(unitId);
+        }
+
+        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        {
         }
     }
 
@@ -276,6 +402,10 @@ public class PubSubTestAll : IDisposable
         {
             clientUnit.Remove(unitId);
         }
+
+        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        {
+        }
     }
 
     internal class DestroyProvider : IProvider
@@ -299,6 +429,70 @@ public class PubSubTestAll : IDisposable
             clientUnit.Remove(unitId);
             if (unitId == ExpectedUnitId)
                 DestroyedSignal?.Set();
+        }
+
+        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        {
+        }
+    }
+
+    internal class MoveWatcherProvider : IProvider
+    {
+        public ManualResetEventSlim? Unit1Created;
+        public ManualResetEventSlim? Unit2Entered;
+        public ManualResetEventSlim? Unit1Left;
+        public long Unit1Id = -1;
+        public long Unit2Id = -1;
+        public string UnitType => "T1";
+
+        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        {
+            var ob = new GameObjectTest();
+            clientUnit[unitId] = ob;
+            if (unitId == Unit1Id)
+                Unit1Created?.Set();
+            if (unitId == Unit2Id)
+                Unit2Entered?.Set();
+            return ob;
+        }
+
+        public void DestroyObject(long unitId, GameObjectTest obj)
+        {
+            clientUnit.Remove(unitId);
+            if (unitId == Unit1Id)
+                Unit1Left?.Set();
+        }
+
+        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        {
+        }
+    }
+
+    internal class EventProvider : IProvider
+    {
+        public ManualResetEventSlim? CreatedSignal;
+        public ManualResetEventSlim? EventSignal;
+        public long ExpectedUnitId = -1;
+        public string UnitType => "T1";
+
+        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        {
+            var ob = new GameObjectTest();
+            clientUnit[unitId] = ob;
+            if (unitId == ExpectedUnitId)
+                CreatedSignal?.Set();
+            return ob;
+        }
+
+        public void DestroyObject(long unitId, GameObjectTest obj)
+        {
+            clientUnit.Remove(unitId);
+        }
+
+        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        {
+            if (unitId == ExpectedUnitId)
+                EventSignal?.Set();
         }
     }
 

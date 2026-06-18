@@ -120,9 +120,11 @@ public interface IProvider
 #if UNITY_ENGINE
     UnityEngine.GameObject CreateObject(long unitId, int version, byte[] data);
     void DestroyObject(long unitId, UnityEngine.GameObject obj);
+    void OnEvent(long unitId, UnityEngine.GameObject obj, string eventName, byte[] data, EventMeta meta);
 #else
     GameObjectTest CreateObject(long unitId, int version, byte[] data);
     void DestroyObject(long unitId, GameObjectTest obj);
+    void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta);
 #endif
 }
 ```
@@ -133,7 +135,24 @@ Factory pattern cho từng loại unit. Bạn implement interface này cho mỗi
 |--------|------------|-------|
 | `CreateObject(unitId, version, data)` | Nhận `BatchEnter` hoặc `SyncEnter` | Tạo GameObject từ prefab, áp dụng data, trả về instance |
 | `DestroyObject(unitId, obj)` | Nhận `BatchLeave` hoặc `SyncLeave` | Hủy GameObject, cleanup resource |
+| `OnEvent(unitId, obj, eventName, data, meta)` | Nhận `UnitEventMsg` | Xử lý event từ unit. `meta.Transport` cho biết event đến qua TCP hay UDP |
 | `UnitType` | — | String type khớp với `unit.Type` trên server (vd: `"hero"`, `"mob"`) |
+
+### EventMeta
+
+```csharp
+public enum EventTransport { Tcp, Udp }
+
+public readonly struct EventMeta
+{
+    public EventTransport Transport { get; }
+    public EventMeta(EventTransport transport);
+}
+```
+
+Dùng trong `IProvider.OnEvent()` để biết event đến qua kênh nào:
+- `EventTransport.Tcp` — reliable, đảm bảo delivery
+- `EventTransport.Udp` — best-effort, có thể mất gói
 
 > **Unity build:** dùng `#if UNITY_ENGINE` — `CreateObject` trả về `UnityEngine.GameObject`, `DestroyObject` nhận `UnityEngine.GameObject`.
 > **Test/Dev build:** dùng `GameObjectTest` (stub class trong package).
@@ -215,6 +234,18 @@ public class HeroProvider : IProvider
         // Unity: Destroy(obj.gameObject)
         Console.WriteLine($"[Client] Hủy hero {unitId}");
     }
+
+    public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+    {
+        if (meta.Transport == EventTransport.Udp)
+        {
+            // Xử lý event UDP (best-effort, có thể bỏ qua nếu FPS thấp)
+        }
+        else
+        {
+            // Xử lý event TCP (reliable, luôn được gọi)
+        }
+    }
 }
 ```
 
@@ -285,10 +316,10 @@ Update() mỗi frame
 
 ### 2. Nhận event từ server
 
-Client subscribe TCP topic `PubSub.Evt` và dispatch theo loại event:
+Client subscribe cả TCP và UDP topic `PubSub.Evt` để nhận event từ server, dispatch theo loại event:
 
 ```
-TCP "PubSub.Evt" ──► PubSubClientModule.OnEvent()
+TCP/UDP "PubSub.Evt" ──► PubSubClientModule.OnEvent()
                         │
                         ▼ switch evt.EvtCase
                     ┌──────────────────────────────────────────────┐
@@ -317,7 +348,7 @@ TCP "PubSub.Evt" ──► PubSubClientModule.OnEvent()
                     │                                              │
                     │ UnitEventMsg                                 │
                     │   → HandleUnitEvent(msg)                     │
-                    │   (hiện tại chưa implement — placeholder)    │
+                    │   → provider.OnEvent(id, go, name, data, meta)│
                     └──────────────────────────────────────────────┘
 ```
 
