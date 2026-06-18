@@ -1,0 +1,377 @@
+# Client — PubSubLib.Client
+
+Package chạy trong game client (Unity / .NET). Tự động ping định kỳ để đồng bộ trạng thái với PubSub server, nhận event để tạo/hủy GameObject. Là một `IClientModule` cắm vào MyConnection client.
+
+## Mục lục
+
+- [Vai trò](#vai-trò)
+- [Cài đặt](#cài-đặt)
+- [Kiến trúc](#kiến-trúc)
+- [API Reference](#api-reference)
+- [Cách dùng](#cách-dùng)
+- [Luồng xử lý nội bộ](#luồng-xử-lý-nội-bộ)
+  - [Tick / Ping cycle](#1-tick--ping-cycle)
+  - [Nhận event từ server](#2-nhận-event-từ-server)
+  - [MoveWatcher](#3-movewatcher)
+  - [Unit tracking với WeakReference](#4-unit-tracking-với-weakreference)
+
+---
+
+## Vai trò
+
+```
+Game Client (PubSubLib.Client) ◄── TCP ──► Router ◄── NATS ──► PubSub Server
+```
+
+Client làm 2 nhiệm vụ:
+
+| Nhiệm vụ | Cơ chế |
+|----------|--------|
+| **Đồng bộ trạng thái** | `Tick()` định kỳ build `PingUnitsCmd` với version map → gửi UDP `PubSub.Cmd` |
+| **Nhận event** | Subscribe TCP `PubSub.Evt` → `HandleBatchEnter`/`HandleSyncEnter`/`HandleBatchLeave`/`HandleSyncLeave` → gọi `IProvider` tạo/hủy GameObject |
+
+Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí do server authoritative quyết định và gửi về qua event.
+
+---
+
+## Cài đặt
+
+```xml
+<PackageReference Include="PubSubLib.Client" Version="1.0.0" />
+```
+
+Package target `netstandard2.1` — tương thích Unity IL2CPP.
+
+Dependencies:
+- `PubSubLib.Contracts` — protobuf message types
+- `Google.Protobuf` (3.34.1) — deserialize message
+- `MyConnection` (1.0.4) — giao tiếp TCP/UDP với Router
+
+---
+
+## Kiến trúc
+
+```
+                         PubSubClientModule                  PubSubClient
+┌──────────────┐        ┌──────────────────────┐        ┌─────────────────────┐
+│ MyConnection │  TCP   │ IClientModule        │        │ IPubSubClient       │
+│   IClient    │◄──────►│                      │───────►│                     │
+│              │        │ SetIClient(client)   │        │ Tick()              │
+│              │        │   → SubscribeTcp     │        │ MoveWatcher()       │
+│              │        │     "PubSub.Evt"     │        │ AddProvider()       │
+│              │        │                      │        │                     │
+│              │  UDP   │                      │        │ _units: Dictionary  │
+│              │◄───────│                      │        │   (Id,Type) → Unit  │
+│              │        │                      │        │ _providers: Dict    │
+│              │        │                      │        │   "type" → IProvider│
+└──────────────┘        └──────────────────────┘        └─────────────────────┘
+                                   │
+                                   ▼
+                            IProvider (do bạn implement)
+                            ├─ HeroProvider  → CreateObject / DestroyObject
+                            └─ MobProvider   → CreateObject / DestroyObject
+```
+
+---
+
+## API Reference
+
+### IPubSubClient
+
+```csharp
+public interface IPubSubClient
+{
+    void Tick();
+    void MoveWatcher(Vector2 position, float radius);
+    IPubSubClient AddProvider(IProvider provider);
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `Tick()` | Gọi mỗi frame. Kiểm tra thời gian ping → nếu đến hạn, build `PingUnitsCmd` và gửi UDP. Đồng thời dọn unit dead (GC collected). |
+| `MoveWatcher(pos, radius)` | Gửi `MoveWatcherCmd` lên server. Deduplicated — chỉ gửi khi vị trí hoặc bán kính thực sự thay đổi. |
+| `AddProvider(provider)` | Đăng ký factory cho 1 `UnitType`. Provider được gọi khi client nhận `BatchEnter`/`SyncEnter` để tạo GameObject, và `BatchLeave`/`SyncLeave` để hủy. |
+
+### IPubSubClientModule
+
+```csharp
+public interface IPubSubClientModule : IClientModule
+{
+    static IPubSubClientModule Create(Config config);
+    IPubSubClient Get();
+}
+```
+
+Module cắm vào MyConnection client:
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `Create(config)` | Tạo module với cấu hình ping |
+| `Get()` | Lấy `IPubSubClient` để gọi `Tick()`, `MoveWatcher()`, `AddProvider()` |
+
+### IProvider
+
+```csharp
+public interface IProvider
+{
+    string UnitType { get; }
+
+#if UNITY_ENGINE
+    UnityEngine.GameObject CreateObject(long unitId, int version, byte[] data);
+    void DestroyObject(long unitId, UnityEngine.GameObject obj);
+#else
+    GameObjectTest CreateObject(long unitId, int version, byte[] data);
+    void DestroyObject(long unitId, GameObjectTest obj);
+#endif
+}
+```
+
+Factory pattern cho từng loại unit. Bạn implement interface này cho mỗi `UnitType`:
+
+| Method | Khi nào gọi | Mô tả |
+|--------|------------|-------|
+| `CreateObject(unitId, version, data)` | Nhận `BatchEnter` hoặc `SyncEnter` | Tạo GameObject từ prefab, áp dụng data, trả về instance |
+| `DestroyObject(unitId, obj)` | Nhận `BatchLeave` hoặc `SyncLeave` | Hủy GameObject, cleanup resource |
+| `UnitType` | — | String type khớp với `unit.Type` trên server (vd: `"hero"`, `"mob"`) |
+
+> **Unity build:** dùng `#if UNITY_ENGINE` — `CreateObject` trả về `UnityEngine.GameObject`, `DestroyObject` nhận `UnityEngine.GameObject`.
+> **Test/Dev build:** dùng `GameObjectTest` (stub class trong package).
+
+### Config
+
+```csharp
+public class Config
+{
+    public int PingIntervalMs { get; set; } = 1000;
+}
+```
+
+| Param | Default | Mô tả |
+|-------|---------|-------|
+| `PingIntervalMs` | 1000 | Tần suất ping (ms). `Tick()` chỉ gửi ping khi thời gian từ lần ping trước ≥ giá trị này. |
+
+---
+
+## Cách dùng
+
+### Setup cơ bản
+
+```csharp
+using MyConnection;
+using PubSubLib.Client;
+
+// 1. Tạo MyConnection client (kết nối đến Router)
+var client = IClient.Create(new ClientConfig
+{
+    tcpServer = "127.0.0.1:9090",
+    udpServer = "127.0.0.1:9091",
+    udpPingIntervalMs = 5000,
+    udpPingTimeoutMs = 15000
+});
+
+// 2. Tạo PubSub client module
+var pubSubModule = IPubSubClientModule.Create(new Config
+{
+    PingIntervalMs = 1000  // ping mỗi 1 giây
+});
+
+// 3. Đăng ký Provider cho từng loại unit
+pubSubModule.Get()
+    .AddProvider(new HeroProvider())
+    .AddProvider(new MobProvider())
+    .AddProvider(new ItemProvider());
+
+// 4. Gắn module vào client
+client.AddModule(pubSubModule);
+
+// 5. Login (UserId = watcherId)
+await client.Login(() => new LoginBody { UserId = "player_42" });
+await client.ConnectServer();
+
+// === Game Loop ===
+// Mỗi frame:
+//   pubSubModule.Get().Tick();                          // ping định kỳ
+//   pubSubModule.Get().MoveWatcher(playerPos, 200f);     // cập nhật vị trí watcher
+```
+
+### Implement IProvider
+
+```csharp
+public class HeroProvider : IProvider
+{
+    public string UnitType => "hero";
+
+    public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+    {
+        // Unity: Instantiate prefab, set position từ data, v.v.
+        var go = new GameObjectTest();
+        Console.WriteLine($"[Client] Tạo hero {unitId} v{version}, data={data?.Length ?? 0} bytes");
+        return go;
+    }
+
+    public void DestroyObject(long unitId, GameObjectTest obj)
+    {
+        // Unity: Destroy(obj.gameObject)
+        Console.WriteLine($"[Client] Hủy hero {unitId}");
+    }
+}
+```
+
+### Game loop đầy đủ
+
+```csharp
+// Unity MonoBehaviour
+public class GameManager : MonoBehaviour
+{
+    private IPubSubClient _pubSubClient;
+
+    void Start()
+    {
+        // ... setup client, login ...
+        var module = IPubSubClientModule.Create(new Config { PingIntervalMs = 500 });
+        _pubSubClient = module.Get();
+        _pubSubClient.AddProvider(new HeroProvider());
+        client.AddModule(module);
+    }
+
+    void Update()
+    {
+        // Gọi Tick() mỗi frame — nội bộ tự kiểm tra thời gian ping
+        _pubSubClient.Tick();
+
+        // Gọi MoveWatcher() mỗi frame — nội bộ tự deduplicate
+        _pubSubClient.MoveWatcher(transform.position, sightRadius);
+    }
+}
+```
+
+---
+
+## Luồng xử lý nội bộ
+
+### 1. Tick / Ping cycle
+
+```
+Update() mỗi frame
+  │
+  ▼ Tick()
+  ├─ Kiểm tra _client != null?
+  ├─ Kiểm tra elapsed >= _pingIntervalMs?
+  │   └─ Không → return (skip ping lần này)
+  │
+  ├─ CleanDeadUnits()
+  │   ├─ Duyệt _units, kiểm tra IsAlive
+  │   ├─ Unit dead (WeakReference mất) → DestroyObject + xóa khỏi _units
+  │   └─ Unit alive → tiếp tục
+  │
+  ├─ Build PingUnitsCmd
+  │   ├─ Gom tất cả unit theo type → TypeGroup
+  │   │   hero: [id=42 v=7, id=43 v=3]
+  │   │   mob:  [id=100 v=1]
+  │   └─ cmd.Units.Add(groups)
+  │
+  └─ _client.SendOnUdp("PubSub.Cmd", PubSubCommand { PingUnits = cmd })
+      │
+      ▼ UDP ──► Router ──► NATS ──► Server // WatcherPingUnits()
+```
+
+**CleanDeadUnits** (`PubSubClient.cs:162-180`):
+- Mỗi lần `Tick()`, trước khi build ping, client duyệt toàn bộ `_units`
+- Nếu `unit.IsAlive == false` (GameObject bị GC collect hoặc Destroy): gọi `DestroyObject` trên provider, xóa khỏi `_units`
+- Đảm bảo ping chỉ chứa unit thực sự còn sống
+
+**Deduplication:** `Tick()` tự kiểm tra `_lastPingTimestamp` — chỉ gửi ping khi đủ `PingIntervalMs`. Bạn có thể gọi `Tick()` mỗi frame mà không lo spam.
+
+### 2. Nhận event từ server
+
+Client subscribe TCP topic `PubSub.Evt` và dispatch theo loại event:
+
+```
+TCP "PubSub.Evt" ──► PubSubClientModule.OnEvent()
+                        │
+                        ▼ switch evt.EvtCase
+                    ┌──────────────────────────────────────────────┐
+                    │ BatchEnterMsg                                │
+                    │   → HandleBatchEnter(msg)                    │
+                    │   → provider.CreateObject(unitId, ver, data) │
+                    │   → _units[(id, type)] = new Unit(...)       │
+                    │                                              │
+                    │ SyncEnterMsg                                 │
+                    │   → foreach item in msg.Units                │
+                    │   → HandleSyncEnter(msg)                     │
+                    │   → provider.CreateObject(...)               │
+                    │   → _units[(id, type)] = new Unit(...)       │
+                    │                                              │
+                    │ BatchLeaveMsg                                │
+                    │   → HandleBatchLeave(msg)                    │
+                    │   → provider.DestroyObject(unitId, target)   │
+                    │   → _units.Remove((id, type))                │
+                    │                                              │
+                    │ SyncLeaveMsg                                 │
+                    │   → foreach group in msg.Keys                │
+                    │   → foreach unitId in group.UnitIds          │
+                    │   → HandleSyncLeave(msg)                     │
+                    │   → provider.DestroyObject(...)              │
+                    │   → _units.Remove((id, type))                │
+                    │                                              │
+                    │ UnitEventMsg                                 │
+                    │   → HandleUnitEvent(msg)                     │
+                    │   (hiện tại chưa implement — placeholder)    │
+                    └──────────────────────────────────────────────┘
+```
+
+**Luồng điển hình:**
+
+```
+1. Server tạo unit → BatchEnter → Client nhận → CreateObject → GameObject xuất hiện
+2. Client Tick() ping → gửi version map → Server so sánh
+3. Server thấy version cũ → SyncEnter với version mới → Client cập nhật
+4. Server thấy unit đã mất → SyncLeave → Client DestroyObject → GameObject biến mất
+```
+
+### 3. MoveWatcher
+
+```
+MoveWatcher(position, radius)
+  │
+  ├─ Lưu _position = position, _radius = radius
+  ├─ Kiểm tra dedup: vị trí và bán kính có khác lần gửi trước?
+  │   └─ Không → return (không gửi lại)
+  │
+  ├─ _lastSentPos = position, _lastSentRadius = radius
+  └─ _client.SendOnUdp("PubSub.Cmd", PubSubCommand { MoveWatcher = cmd })
+      │
+      ▼ UDP ──► Router ──► NATS ──► Server // pubSub.MoveWatcher()
+```
+
+**Deduplication:** So sánh `(x, y, radius)` hiện tại với lần gửi trước. Chỉ gửi khi thực sự thay đổi — tránh spam network khi nhân vật đứng yên.
+
+### 4. Unit tracking với WeakReference
+
+```
+Client _units: Dictionary<(long Id, string Type), Unit>
+
+Unit (client-side):
+  ├─ Id, Version, Type
+  └─ WeakReference<object> → GameObject
+
+Vòng đời:
+  1. Nhận BatchEnter/SyncEnter → CreateObject → Unit(obj) với WeakReference
+  2. Tick() → CleanDeadUnits → kiểm tra Unit.IsAlive
+     ├─ Alive (WeakReference còn target) → giữ lại trong ping
+     └─ Dead (GC collected / Destroy) → DestroyObject + xóa khỏi _units
+  3. Nhận BatchLeave/SyncLeave → DestroyObject + xóa khỏi _units
+```
+
+**Cơ chế an toàn GC:**
+- Client giữ `WeakReference` tới GameObject, không phải strong reference
+- Nếu GameObject bị destroy từ bên ngoài (vd: scene unload), `IsAlive` → false
+- Lần `Tick()` tiếp theo, `CleanDeadUnits` phát hiện và dọn dẹp
+- Server sẽ nhận ping thiếu unit → `SyncLeave` (nếu unit thực sự không còn trên server) hoặc `SyncEnter` (re-sync nếu unit vẫn còn)
+
+---
+
+## Ví dụ hoàn chỉnh
+
+Full setup Client + Router + Server: xem [PubSubTestAll.cs](../PubSubLibTest/PubSubTestAll.cs) — test `FullStack_ClientKillsUnit_ServerResyncs` mô phỏng client mất unit → server re-sync.
