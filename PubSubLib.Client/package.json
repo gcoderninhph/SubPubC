@@ -3,8 +3,5 @@
   "version": "1.1.0",
   "displayName": "PubSub Client",
   "description": "PubSub client for Unity - receive events, create/destroy GameObjects",
-  "unity": "2021.3",
-  "dependencies": {
-    "com.ninh.myconnection": "https://github.com/gcoderninhph/SubPubC.git?path=MyConnection"
-  }
+  "unity": "2021.3"
 }
