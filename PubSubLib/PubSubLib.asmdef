@@ -1,10 +1,7 @@
 ﻿{
     "name": "PubSubLib.Core",
     "rootNamespace": "PubSubLib",
-    "references": [
-        "Natify",
-        "PubSubLib.Contracts"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

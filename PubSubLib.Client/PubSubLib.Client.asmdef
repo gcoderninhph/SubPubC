@@ -1,10 +1,7 @@
 ﻿{
     "name": "PubSubLib.Client",
     "rootNamespace": "PubSubLib.Client",
-    "references": [
-        "PubSubLib.Contracts",
-        "MyConnection"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
