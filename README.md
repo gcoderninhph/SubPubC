@@ -278,6 +278,10 @@ SubPubC.sln
 │   ├── PubSubClientModule.cs  # Bridges MyConnection events
 │   ├── IProvider.cs           # Factory (IProvider<T>), IAlive interface
 │   ├── IAlive.cs              # IAlive interface
+│   ├── ProviderAbstract.cs    # Abstract base class with GetAllUnits()/GetUnit()
+│   ├── IUnit.cs               # Unit interface (IUnit, IUnit<T>)
+│   ├── Unit.cs                # Unit implementation
+│   ├── TypedUnit.cs           # Typed wrapper (IUnit → IUnit<T>)
 │   ├── EventMeta.cs           # EventTransport enum (Tcp/Udp)
 │   └── Config.cs              # PingIntervalMs
 │
@@ -296,7 +300,7 @@ SubPubC.sln
 
 ```xml
 <PackageReference Include="PubSubLib" Version="1.4.0" />              <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.5.0" />       <!-- Game client -->
+<PackageReference Include="PubSubLib.Client" Version="1.6.0" />       <!-- Game client -->
 <PackageReference Include="PubSubLib.Router" Version="1.3.0" />       <!-- NATS bridge -->
 <PackageReference Include="PubSubLib.Contracts" Version="1.3.0" />    <!-- Protobuf messages -->
 ```

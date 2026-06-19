@@ -37,7 +37,7 @@ Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Client" Version="1.4.0" />
+<PackageReference Include="PubSubLib.Client" Version="1.6.0" />
 ```
 
 Package target `netstandard2.1` — tương thích Unity IL2CPP.
@@ -89,6 +89,32 @@ public interface IPubSubClient : IDisposable
     IUnit? GetUnit(long unitId, string unitType);
 }
 ```
+
+### IUnit / IUnit\<T\>
+
+```csharp
+public interface IUnit
+{
+    string UnitType { get; }
+    long Id { get; }
+    int Version { get; }
+    bool IsAlive { get; }
+    object? Target { get; }
+}
+
+public interface IUnit<T> : IUnit where T : class, IAlive
+{
+    new T? Target { get; }
+}
+```
+
+| Member | Mô tả |
+|--------|-------|
+| `UnitType` | Loại unit ("hero", "mob") |
+| `Id` | ID duy nhất |
+| `Version` | Tăng khi server cập nhật unit |
+| `IsAlive` | `true` nếu target còn sống |
+| `Target` | Object gốc. `IUnit` trả về `object?`, `IUnit<T>` trả về `T?` (typed) |
 
 | Phương thức | Mô tả |
 |-------------|-------|
@@ -151,6 +177,60 @@ Factory pattern cho từng loại unit. Bạn implement `IProvider<T>` (generic)
 | `UnitType` | — | String type khớp với `unit.Type` trên server (vd: `"hero"`, `"mob"`) |
 
 > Dùng `object` thay vì `GameObject` — provider trong Unity cast sang `GameObject`, provider test dùng `object` trực tiếp. Không phụ thuộc Unity Engine.
+
+### ProviderAbstract\<T\>
+
+```csharp
+public abstract class ProviderAbstract<T> : IProvider<T> where T : class, IAlive
+{
+    protected ProviderAbstract(IPubSubClient client);
+
+    public IReadOnlyList<IUnit<T>> GetAllUnits();
+    public IUnit<T>? GetUnit(long unitId);
+
+    public abstract string UnitType { get; }
+    public abstract T CreateObject(long unitId, byte[] data);
+    public abstract void UpdateObject(long unitId, T obj, byte[] data);
+    public abstract void DestroyObject(long unitId, T obj);
+    public abstract void OnEvent(long unitId, T obj, string eventName, byte[] data, EventMeta meta);
+}
+```
+
+Abstract class convenience — kế thừa `ProviderAbstract<T>` thay vì implement `IProvider<T>` thủ công để có sẵn 2 helper lookup unit:
+
+| Method | Mô tả |
+|--------|-------|
+| `GetAllUnits()` | Trả về tất cả `IUnit<T>` thuộc `UnitType` của provider này. `IUnit<T>.Target` trả về `T?` — không cần cast. |
+| `GetUnit(unitId)` | Tìm unit theo id, trả về `null` nếu không có. |
+
+Constructor nhận `IPubSubClient` để truy vấn nội bộ. Provider dùng:
+
+```csharp
+public class HeroProvider : ProviderAbstract<Hero>
+{
+    public HeroProvider(IPubSubClient client) : base(client) { }
+
+    public override string UnitType => "hero";
+
+    public override Hero CreateObject(long unitId, byte[] data) { ... }
+    public override void UpdateObject(long unitId, Hero obj, byte[] data) { }
+    public override void DestroyObject(long unitId, Hero obj) { ... }
+    public override void OnEvent(long unitId, Hero obj, string eventName, byte[] data, EventMeta meta) { }
+
+    void HealAll()
+    {
+        foreach (var u in GetAllUnits())  // IUnit<Hero>
+        {
+            var hero = u.Target;           // Hero? — typed!
+            if (hero != null) hero.Hp = 100;
+        }
+    }
+}
+
+// Setup:
+var client = module.Get();
+client.AddProvider(new HeroProvider(client));
+```
 
 ### EventMeta
 

@@ -6,4 +6,10 @@ public interface IUnit
     long Id { get; }
     int Version { get; }
     bool IsAlive { get; }
+    object? Target { get; }
+}
+
+public interface IUnit<T> : IUnit where T : class, IAlive
+{
+    new T? Target { get; }
 }
