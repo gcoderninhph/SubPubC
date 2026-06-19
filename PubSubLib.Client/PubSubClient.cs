@@ -95,6 +95,29 @@ internal sealed class PubSubClient : IPubSubClient
         return this;
     }
 
+    public IReadOnlyList<IUnit> GetAllUnits()
+    {
+        var list = new List<IUnit>();
+        foreach (var kv in _units)
+            list.Add(kv.Value);
+        return list;
+    }
+
+    public IReadOnlyList<IUnit> GetAllUnitsByType(string unitType)
+    {
+        var list = new List<IUnit>();
+        foreach (var (key, unit) in _units)
+            if (key.Type == unitType)
+                list.Add(unit);
+        return list;
+    }
+
+    public IUnit? GetUnit(long unitId, string unitType)
+    {
+        _units.TryGetValue((unitId, unitType), out var unit);
+        return unit;
+    }
+
     internal void HandleBatchEnter(BatchEnterMsg msg)
     {
         if (!_providers.TryGetValue(msg.UnitType, out var provider))
