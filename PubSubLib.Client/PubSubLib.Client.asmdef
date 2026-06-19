@@ -1,0 +1,17 @@
+﻿{
+    "name": "PubSubLib.Client",
+    "rootNamespace": "PubSubLib.Client",
+    "references": [
+        "PubSubLib.Contracts",
+        "MyConnection"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
