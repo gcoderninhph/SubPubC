@@ -1,0 +1,10 @@
+{
+  "name": "com.ninh.pubsub.core",
+  "version": "1.1.0",
+  "displayName": "PubSub Core",
+  "description": "Spatial pub/sub engine - cell management, watchers, units",
+  "unity": "2021.3",
+  "dependencies": {
+    "com.ninh.natify": "https://github.com/gcoderninhph/SubPubC.git?path=Natify"
+  }
+}
