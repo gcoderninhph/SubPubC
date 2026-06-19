@@ -1,6 +1,6 @@
 namespace PubSubLib.Client;
 
-public interface IPubSubClient
+public interface IPubSubClient : IDisposable
 {
     void Tick();
     void MoveWatcher(Vector2 postion, float radius);

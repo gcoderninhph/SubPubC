@@ -236,4 +236,19 @@ internal sealed class PubSubClient : IPubSubClient
     {
         provider.DestroyObject(unitId, target);
     }
+
+    public void Dispose()
+    {
+        foreach (var (key, unit) in _units)
+        {
+            if (unit.IsAlive && unit.Target is { } target
+                && _providers.TryGetValue(key.Type, out var provider))
+            {
+                provider.DestroyObject(key.Id, target);
+            }
+        }
+        _units.Clear();
+        _providers.Clear();
+        _client = null;
+    }
 }

@@ -2,7 +2,7 @@
 
 namespace PubSubLib.Client;
 
-public interface IPubSubClientModule : IClientModule
+public interface IPubSubClientModule : IClientModule, IDisposable
 {
     static IPubSubClientModule Create(Config config)
     {

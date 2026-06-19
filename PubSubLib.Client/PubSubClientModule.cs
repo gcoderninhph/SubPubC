@@ -6,6 +6,8 @@ namespace PubSubLib.Client;
 internal sealed class PubSubClientModule : IPubSubClientModule
 {
     private readonly PubSubClient _pubSubClient;
+    private ISubscribe? _tcpSub;
+    private ISubscribe? _udpSub;
 
     public PubSubClientModule(Config config)
     {
@@ -15,8 +17,8 @@ internal sealed class PubSubClientModule : IPubSubClientModule
     public void SetIClient(IClient client)
     {
         _pubSubClient.SetClient(client);
-        client.SubscribeTcp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Tcp));
-        client.SubscribeUdp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Udp));
+        _tcpSub = client.SubscribeTcp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Tcp));
+        _udpSub = client.SubscribeUdp<PubSubEvent>("PubSub.Evt", evt => OnEvent(evt, EventTransport.Udp));
     }
 
     private void OnEvent(PubSubEvent evt, EventTransport transport)
@@ -44,5 +46,12 @@ internal sealed class PubSubClientModule : IPubSubClientModule
     public IPubSubClient Get()
     {
         return _pubSubClient;
+    }
+
+    public void Dispose()
+    {
+        _tcpSub?.UnSubscribe();
+        _udpSub?.UnSubscribe();
+        _pubSubClient.Dispose();
     }
 }

@@ -37,7 +37,7 @@ Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Client" Version="1.1.0" />
+<PackageReference Include="PubSubLib.Client" Version="1.4.0" />
 ```
 
 Package target `netstandard2.1` — tương thích Unity IL2CPP.
@@ -79,11 +79,14 @@ Dependencies:
 ### IPubSubClient
 
 ```csharp
-public interface IPubSubClient
+public interface IPubSubClient : IDisposable
 {
     void Tick();
     void MoveWatcher(Vector2 position, float radius);
     IPubSubClient AddProvider(IProvider provider);
+    IReadOnlyList<IUnit> GetAllUnits();
+    IReadOnlyList<IUnit> GetAllUnitsByType(string unitType);
+    IUnit? GetUnit(long unitId, string unitType);
 }
 ```
 
@@ -92,11 +95,15 @@ public interface IPubSubClient
 | `Tick()` | Gọi mỗi frame. Kiểm tra thời gian ping → nếu đến hạn, build `PingUnitsCmd` và gửi UDP. Đồng thời dọn unit dead (GC collected). |
 | `MoveWatcher(pos, radius)` | Gửi `MoveWatcherCmd` lên server. Deduplicated — chỉ gửi khi vị trí hoặc bán kính thực sự thay đổi. |
 | `AddProvider(provider)` | Đăng ký factory cho 1 `UnitType`. Provider được gọi khi client nhận `BatchEnter`/`SyncEnter` để tạo GameObject, và `BatchLeave`/`SyncLeave` để hủy. |
+| `GetAllUnits()` | Trả về toàn bộ unit client đang track. |
+| `GetAllUnitsByType(type)` | Trả về các unit cùng loại (vd: tất cả `"hero"`). |
+| `GetUnit(id, type)` | Tìm 1 unit cụ thể theo id và type, trả về `null` nếu không có. |
+| `Dispose()` | Dọn dẹp: hủy tất cả unit qua provider, clear dictionaries. |
 
 ### IPubSubClientModule
 
 ```csharp
-public interface IPubSubClientModule : IClientModule
+public interface IPubSubClientModule : IClientModule, IDisposable
 {
     static IPubSubClientModule Create(Config config);
     IPubSubClient Get();
@@ -109,6 +116,7 @@ Module cắm vào MyConnection client:
 |-------------|-------|
 | `Create(config)` | Tạo module với cấu hình ping |
 | `Get()` | Lấy `IPubSubClient` để gọi `Tick()`, `MoveWatcher()`, `AddProvider()` |
+| `Dispose()` | Hủy đăng ký TCP/UDP subscriber, dispose inner `PubSubClient` |
 
 ### IProvider
 
@@ -117,15 +125,10 @@ public interface IProvider
 {
     string UnitType { get; }
 
-#if UNITY_ENGINE
-    UnityEngine.GameObject CreateObject(long unitId, int version, byte[] data);
-    void DestroyObject(long unitId, UnityEngine.GameObject obj);
-    void OnEvent(long unitId, UnityEngine.GameObject obj, string eventName, byte[] data, EventMeta meta);
-#else
-    GameObjectTest CreateObject(long unitId, int version, byte[] data);
-    void DestroyObject(long unitId, GameObjectTest obj);
-    void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta);
-#endif
+    object CreateObject(long unitId, byte[] data);
+    void UpdateObject(long unitId, object obj, byte[] data);
+    void DestroyObject(long unitId, object obj);
+    void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta);
 }
 ```
 
@@ -133,10 +136,13 @@ Factory pattern cho từng loại unit. Bạn implement interface này cho mỗi
 
 | Method | Khi nào gọi | Mô tả |
 |--------|------------|-------|
-| `CreateObject(unitId, version, data)` | Nhận `BatchEnter` hoặc `SyncEnter` | Tạo GameObject từ prefab, áp dụng data, trả về instance |
-| `DestroyObject(unitId, obj)` | Nhận `BatchLeave` hoặc `SyncLeave` | Hủy GameObject, cleanup resource |
+| `CreateObject(unitId, data)` | Nhận `BatchEnter` hoặc `SyncEnter` lần đầu | Tạo object (vd: GameObject), áp dụng data, trả về instance |
+| `UpdateObject(unitId, obj, data)` | Nhận `SyncEnter` khi unit đã tồn tại | Cập nhật object hiện có (re-sync, tái sử dụng thay vì tạo mới) |
+| `DestroyObject(unitId, obj)` | Nhận `BatchLeave` hoặc `SyncLeave` | Hủy object, cleanup resource |
 | `OnEvent(unitId, obj, eventName, data, meta)` | Nhận `UnitEventMsg` | Xử lý event từ unit. `meta.Transport` cho biết event đến qua TCP hay UDP |
 | `UnitType` | — | String type khớp với `unit.Type` trên server (vd: `"hero"`, `"mob"`) |
+
+> Dùng `object` thay vì `GameObject` — provider trong Unity cast sang `GameObject`, provider test dùng `object` trực tiếp. Không phụ thuộc Unity Engine.
 
 ### EventMeta
 
@@ -154,8 +160,7 @@ Dùng trong `IProvider.OnEvent()` để biết event đến qua kênh nào:
 - `EventTransport.Tcp` — reliable, đảm bảo delivery
 - `EventTransport.Udp` — best-effort, có thể mất gói
 
-> **Unity build:** dùng `#if UNITY_ENGINE` — `CreateObject` trả về `UnityEngine.GameObject`, `DestroyObject` nhận `UnityEngine.GameObject`.
-> **Test/Dev build:** dùng `GameObjectTest` (stub class trong package).
+> Dùng `object` cho mọi tham số — không phụ thuộc Unity Engine. Provider trong Unity cast sang `GameObject`, provider test dùng `object` trực tiếp.
 
 ### Config
 
@@ -221,21 +226,26 @@ public class HeroProvider : IProvider
 {
     public string UnitType => "hero";
 
-    public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+    public object CreateObject(long unitId, byte[] data)
     {
-        // Unity: Instantiate prefab, set position từ data, v.v.
-        var go = new GameObjectTest();
-        Console.WriteLine($"[Client] Tạo hero {unitId} v{version}, data={data?.Length ?? 0} bytes");
+        // Unity: Instantiate(prefab) as GameObject
+        var go = new object();
+        Console.WriteLine($"[Client] Tạo hero {unitId}, data={data?.Length ?? 0} bytes");
         return go;
     }
 
-    public void DestroyObject(long unitId, GameObjectTest obj)
+    public void UpdateObject(long unitId, object obj, byte[] data)
     {
-        // Unity: Destroy(obj.gameObject)
+        // Unity: cập nhật dữ liệu trên GameObject đã có
+    }
+
+    public void DestroyObject(long unitId, object obj)
+    {
+        // Unity: Destroy((GameObject)obj)
         Console.WriteLine($"[Client] Hủy hero {unitId}");
     }
 
-    public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+    public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
     {
         if (meta.Transport == EventTransport.Udp)
         {

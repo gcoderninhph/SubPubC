@@ -102,6 +102,7 @@ public class PubSubTestAll : IDisposable
 
     public void Dispose()
     {
+        _pubSubClientModule?.Dispose();
         _clientConn?.DisposeAsync().GetAwaiter().GetResult();
         _serverConn?.DisposeAsync().GetAwaiter().GetResult();
         _pubSub?.Dispose();

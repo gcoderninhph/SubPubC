@@ -199,21 +199,26 @@ public class HeroProvider : IProvider
 {
     public string UnitType => "hero";
 
-    public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+    public object CreateObject(long unitId, byte[] data)
     {
         // Tạo GameObject từ prefab, áp dụng data...
-        var go = new GameObjectTest();
-        Console.WriteLine($"[Client] Tạo hero {unitId} v{version}");
+        var go = new object();
+        Console.WriteLine($"[Client] Tạo hero {unitId}");
         return go;
     }
 
-    public void DestroyObject(long unitId, GameObjectTest obj)
+    public void UpdateObject(long unitId, object obj, byte[] data)
+    {
+        // Cập nhật GameObject đã có (re-sync)
+    }
+
+    public void DestroyObject(long unitId, object obj)
     {
         // Hủy GameObject
         Console.WriteLine($"[Client] Hủy hero {unitId}");
     }
 
-    public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+    public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
     {
         if (meta.Transport == EventTransport.Udp)
         {
@@ -284,10 +289,10 @@ SubPubC.sln
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.1.0" />              <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.1.0" />       <!-- Game client -->
-<PackageReference Include="PubSubLib.Router" Version="1.1.0" />       <!-- NATS bridge -->
-<PackageReference Include="PubSubLib.Contracts" Version="1.1.0" />    <!-- Protobuf messages -->
+<PackageReference Include="PubSubLib" Version="1.3.0" />              <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="1.4.0" />       <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="1.3.0" />       <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="1.3.0" />    <!-- Protobuf messages -->
 ```
 
 ## Build & Test
