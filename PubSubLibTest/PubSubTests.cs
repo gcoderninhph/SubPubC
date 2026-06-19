@@ -2,9 +2,10 @@ using PubSubLib;
 
 namespace PubSubLibTest;
 
-class Player
+class Player : IAlive
 {
     public string Name = "";
+    public bool IsAlive { get; set; } = true;
 }
 
 public class PubSubTests
@@ -667,11 +668,11 @@ public class PubSubTests
 
     // ===== Lazy cleanup =====
 
-    private static UnitKey CreateDoomedUnit(IPubSub pubSub)
+    private static (UnitKey key, Player target) CreateDoomedUnit(IPubSub pubSub)
     {
         var target = new Player { Name = "doomed" };
         pubSub.CreateUnit<Player>(13, "mob", V(50, 50), target, _ => { });
-        return new UnitKey(13, "mob");
+        return (new UnitKey(13, "mob"), target);
     }
 
     [Fact]
@@ -683,13 +684,11 @@ public class PubSubTests
         var pubSub = CreatePubSub();
         try
         {
-            var deadKey = CreateDoomedUnit(pubSub);
+            var (deadKey, target) = CreateDoomedUnit(pubSub);
             pubSub.AddWatcher(1, V(0, 0), 200);
             await pubSub.FlushAsync();
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            target.IsAlive = false;
 
             Action<(long, List<UnitKey>)> cb = tuple =>
             {
@@ -727,7 +726,7 @@ public class PubSubTests
             };
             pubSub.OnUnitEnter(enterCb);
 
-            var deadKey = CreateDoomedUnit(pubSub);
+            var (deadKey, target) = CreateDoomedUnit(pubSub);
             pubSub.AddWatcher(1, V(0, 0), 200);
             await pubSub.FlushAsync();
 
@@ -735,9 +734,7 @@ public class PubSubTests
             Assert.NotNull(enteredUnit);
             Assert.Equal(13, enteredUnit.Id);
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            target.IsAlive = false;
 
             Action<(long, List<UnitKey>)> leaveCb = tuple =>
             {

@@ -49,7 +49,7 @@ Dependencies:
 
 | Khái niệm | Định nghĩa |
 |-----------|------------|
-| **Unit** | Thực thể game có `Id`, `Type`, `Position` (2D), `Data` (binary), và `WeakReference` tới object của bạn. |
+| **Unit** | Thực thể game có `Id`, `Type`, `Position` (2D), `Data` (binary), và strong reference (`IAlive`) tới object của bạn. |
 | **Watcher** | Người quan sát tại một vị trí với `Radius`. Nhận event cho mọi unit có vị trí nằm trong bán kính. |
 | **Cell** | Lưới không gian được chia thành các ô vuông (kích thước `GridSize`). Truy vấn không gian O(1). |
 | **BatchEnter** | Thông báo fire-and-forget: *unit này vừa vào tầm quan sát của bạn*. |
@@ -89,9 +89,9 @@ public interface IPubSub : IDisposable
 
     // ── Unit lifecycle ──
     void CreateUnit<T>(long id, string type, Vector2 position, T target,
-        Action<IUnit> onCreated, byte[]? data = null) where T : class;
+        Action<IUnit> onCreated, byte[]? data = null) where T : class, IAlive;
     Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position,
-        T target, byte[]? data = null) where T : class;
+        T target, byte[]? data = null) where T : class, IAlive;
     Task FlushAsync();
 
     // ── Watcher lifecycle ──
@@ -120,7 +120,7 @@ public interface IPubSub : IDisposable
 }
 ```
 
-> **Lưu ý về generic**: `CreateUnit<T>` và `CreateUnitAsync<T>` giữ `<T>` ở cấp method để type-safety cho tham số `target`. Các callback và interface `IUnit` không còn generic — `Target` trả về `object?`.
+> **Lưu ý về generic**: `CreateUnit<T>` và `CreateUnitAsync<T>` yêu cầu `T : class, IAlive` để type-safety cho tham số `target`. Các callback và interface `IUnit` không còn generic — `Target` trả về `object?`.
 
 #### Các phương thức chi tiết
 
@@ -154,7 +154,7 @@ public interface IUnit
     long Id { get; }              // ID duy nhất
     string Type { get; }          // loại unit ("hero", "mob", "item")
     Vector2 Position { get; set; } // vị trí 2D — set trigger cập nhật cell + tăng version
-    bool IsAlive { get; }         // false nếu target bị GC collect
+    bool IsAlive { get; }         // false nếu target có IAlive.IsAlive == false
     object? Target { get; }       // target object (null nếu bị collect)
     int Version { get; }          // tăng khi Position hoặc Data thay đổi
     byte[]? Data { get; set; }    // binary payload — set trigger tăng version
@@ -168,7 +168,7 @@ Các hành vi chính:
 - **Set `Position` cùng giá trị**: no-op (không tăng version, không event).
 - **`Destroy()`**: xóa unit khỏi grid, fire `BatchLeave` tới mọi watcher hiện tại đang quan sát.
 - **`PublishEvent()`**: fire `UnitEvent` tới mọi watcher có cell chứa unit.
-- **`IsAlive`**: dùng `WeakReference.TryGetTarget` — nếu target object bị GC collect, unit coi là dead và sẽ bị lazy cleanup.
+- **`IsAlive`**: delegate qua `IAlive.IsAlive` — nếu target set `IsAlive = false`, unit coi là dead và sẽ bị lazy cleanup.
 
 ### UnitKey
 
@@ -244,7 +244,7 @@ CreateUnit (bất kỳ thread nào)
   │ enqueue Action
   ▼
 Worker Thread (PubSubLib.EventChannel)
-  ├─ Tạo Unit(id, type, pos, target) với WeakReference
+  ├─ Tạo Unit(id, type, pos, target) với IAlive
   ├─ _units[key] = unit
   ├─ Cell = GetGridCellByPosition(pos)
   ├─ cell.AddUnit(key)
@@ -478,8 +478,8 @@ while (running)
 
 ### Memory Management
 
-- Unit giữ `WeakReference` tới target object (vd: `Player`, `Monster`)
-- `IsAlive` trả về `false` khi GC collect target
+- Unit giữ strong reference tới target object (vd: `Player`, `Monster`) yêu cầu implement `IAlive`
+- `IsAlive` trả về `false` khi target set `IsAlive = false`
 - `TryResolveAlive()` gặp unit dead trong bất kỳ thao tác nào (ping, cell query) → tự động xóa unit khỏi dictionary nội bộ + fire cleanup event
-- **Best practice:** Gọi `unit.Destroy()` tường minh khi xóa entity. `WeakReference` lazy cleanup là safety net, không phải cơ chế xóa chính.
+- **Best practice:** Gọi `unit.Destroy()` tường minh khi xóa entity. Set `IsAlive = false` trước khi bỏ reference.
 - `ListPool<T>` (ConcurrentBag-based) tái sử dụng `List<T>` instance cho callback để giảm allocation.

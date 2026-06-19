@@ -5,6 +5,8 @@ using PubSubLib.Client;
 using PubSubLib.Messages;
 using PubSubLib.Router;
 using Vector2 = PubSubLib.Vector2;
+using ServerAlive = PubSubLib.IAlive;
+using ClientAlive = PubSubLib.Client.IAlive;
 
 
 namespace PubSubLibTest;
@@ -21,7 +23,7 @@ public class PubSubTestAll : IDisposable
     private IPubSub _pubSub;
     private IPubSubClientModule _pubSubClientModule;
 
-    private static readonly Dictionary<long, object> clientUnit = new();
+    private static readonly Dictionary<long, AliveStub> clientUnit = new();
     private static readonly Dictionary<long, MyUnit> serverUnit = new();
 
     private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
@@ -93,10 +95,9 @@ public class PubSubTestAll : IDisposable
 
     private void DestroyUnit(long unitId)
     {
+        if (serverUnit.TryGetValue(unitId, out var myUnit))
+            myUnit.IsAlive = false;
         serverUnit.Remove(unitId);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
     }
 
 
@@ -164,11 +165,10 @@ public class PubSubTestAll : IDisposable
             await Task.Delay(1500);
         }
 
-        // Stage 2: kill unit on client — remove ref + GC so WeakReference dies
+        // Stage 2: kill unit on client — set IsAlive = false to simulate dead unit
+        if (clientUnit.TryGetValue(unitId, out var stub))
+            stub.IsAlive = false;
         clientUnit.Remove(unitId);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
 
         // Stage 3: tick → ping empty but watcher remembers "T1" → server re-syncs unit
         using (var cts = new CancellationTokenSource())
@@ -351,36 +351,36 @@ public class PubSubTestAll : IDisposable
         }
     }
 
-    internal class Provider : IProvider
+    internal class Provider : IProvider<AliveStub>
     {
         public ManualResetEventSlim? CreatedSignal;
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, byte[] data)
+        public AliveStub CreateObject(long unitId, byte[] data)
         {
-            var ob1 = new object();
+            var ob1 = new AliveStub();
             clientUnit[unitId] = ob1;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob1;
         }
 
-        public void UpdateObject(long unitId, object obj, byte[] data)
+        public void UpdateObject(long unitId, AliveStub obj, byte[] data)
         {
         }
 
-        public void DestroyObject(long unitId, object obj)
+        public void DestroyObject(long unitId, AliveStub obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, AliveStub obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
 
-    internal class ResyncProvider : IProvider
+    internal class ResyncProvider : IProvider<AliveStub>
     {
         public ManualResetEventSlim? CreatedSignal;
         public ManualResetEventSlim? ResyncSignal;
@@ -388,9 +388,9 @@ public class PubSubTestAll : IDisposable
         public string UnitType => "T1";
         private int _expectedCreateCount;
 
-        public object CreateObject(long unitId, byte[] data)
+        public AliveStub CreateObject(long unitId, byte[] data)
         {
-            var ob = new object();
+            var ob = new AliveStub();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
             {
@@ -403,53 +403,53 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void UpdateObject(long unitId, object obj, byte[] data)
+        public void UpdateObject(long unitId, AliveStub obj, byte[] data)
         {
         }
 
-        public void DestroyObject(long unitId, object obj)
+        public void DestroyObject(long unitId, AliveStub obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, AliveStub obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
 
-    internal class DestroyProvider : IProvider
+    internal class DestroyProvider : IProvider<AliveStub>
     {
         public ManualResetEventSlim? CreatedSignal;
         public ManualResetEventSlim? DestroyedSignal;
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, byte[] data)
+        public AliveStub CreateObject(long unitId, byte[] data)
         {
-            var ob = new object();
+            var ob = new AliveStub();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob;
         }
 
-        public void UpdateObject(long unitId, object obj, byte[] data)
+        public void UpdateObject(long unitId, AliveStub obj, byte[] data)
         {
         }
 
-        public void DestroyObject(long unitId, object obj)
+        public void DestroyObject(long unitId, AliveStub obj)
         {
             clientUnit.Remove(unitId);
             if (unitId == ExpectedUnitId)
                 DestroyedSignal?.Set();
         }
 
-        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, AliveStub obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
 
-    internal class MoveWatcherProvider : IProvider
+    internal class MoveWatcherProvider : IProvider<AliveStub>
     {
         public ManualResetEventSlim? Unit1Created;
         public ManualResetEventSlim? Unit2Entered;
@@ -458,9 +458,9 @@ public class PubSubTestAll : IDisposable
         public long Unit2Id = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, byte[] data)
+        public AliveStub CreateObject(long unitId, byte[] data)
         {
-            var ob = new object();
+            var ob = new AliveStub();
             clientUnit[unitId] = ob;
             if (unitId == Unit1Id)
                 Unit1Created?.Set();
@@ -469,56 +469,62 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void UpdateObject(long unitId, object obj, byte[] data)
+        public void UpdateObject(long unitId, AliveStub obj, byte[] data)
         {
         }
 
-        public void DestroyObject(long unitId, object obj)
+        public void DestroyObject(long unitId, AliveStub obj)
         {
             clientUnit.Remove(unitId);
             if (unitId == Unit1Id)
                 Unit1Left?.Set();
         }
 
-        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, AliveStub obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
 
-    internal class EventProvider : IProvider
+    internal class EventProvider : IProvider<AliveStub>
     {
         public ManualResetEventSlim? CreatedSignal;
         public ManualResetEventSlim? EventSignal;
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, byte[] data)
+        public AliveStub CreateObject(long unitId, byte[] data)
         {
-            var ob = new object();
+            var ob = new AliveStub();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob;
         }
 
-        public void UpdateObject(long unitId, object obj, byte[] data)
+        public void UpdateObject(long unitId, AliveStub obj, byte[] data)
         {
         }
 
-        public void DestroyObject(long unitId, object obj)
+        public void DestroyObject(long unitId, AliveStub obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, AliveStub obj, string eventName, byte[] data, EventMeta meta)
         {
             if (unitId == ExpectedUnitId)
                 EventSignal?.Set();
         }
     }
 
-    internal class MyUnit
+    internal class MyUnit : ServerAlive
     {
+        public bool IsAlive { get; set; } = true;
+    }
+
+    internal class AliveStub : ClientAlive
+    {
+        public bool IsAlive { get; set; } = true;
     }
 
     internal class Player(string id, string name) : IUser

@@ -13,7 +13,7 @@ Package chạy trong game client (Unity / .NET). Tự động ping định kỳ 
   - [Tick / Ping cycle](#1-tick--ping-cycle)
   - [Nhận event từ server](#2-nhận-event-từ-server)
   - [MoveWatcher](#3-movewatcher)
-  - [Unit tracking với WeakReference](#4-unit-tracking-với-weakreference)
+  - [Unit tracking với IAlive](#4-unit-tracking-với-ialive)
 
 ---
 
@@ -125,18 +125,26 @@ public interface IProvider
 {
     string UnitType { get; }
 
-    object CreateObject(long unitId, byte[] data);
-    void UpdateObject(long unitId, object obj, byte[] data);
-    void DestroyObject(long unitId, object obj);
-    void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta);
+    IAlive CreateObject(long unitId, byte[] data);
+    void UpdateObject(long unitId, IAlive obj, byte[] data);
+    void DestroyObject(long unitId, IAlive obj);
+    void OnEvent(long unitId, IAlive obj, string eventName, byte[] data, EventMeta meta);
+}
+
+public interface IProvider<T> : IProvider where T : class, IAlive
+{
+    new T CreateObject(long unitId, byte[] data);
+    new void UpdateObject(long unitId, T obj, byte[] data);
+    new void DestroyObject(long unitId, T obj);
+    new void OnEvent(long unitId, T obj, string eventName, byte[] data, EventMeta meta);
 }
 ```
 
-Factory pattern cho từng loại unit. Bạn implement interface này cho mỗi `UnitType`:
+Factory pattern cho từng loại unit. Bạn implement `IProvider<T>` (generic) là đủ — `IProvider` (non-generic) có default interface methods tự động delegate.
 
 | Method | Khi nào gọi | Mô tả |
 |--------|------------|-------|
-| `CreateObject(unitId, data)` | Nhận `BatchEnter` hoặc `SyncEnter` lần đầu | Tạo object (vd: GameObject), áp dụng data, trả về instance |
+| `CreateObject(unitId, data)` | Nhận `BatchEnter` hoặc `SyncEnter` lần đầu | Tạo object (vd: `Hero`), áp dụng data, trả về instance |
 | `UpdateObject(unitId, obj, data)` | Nhận `SyncEnter` khi unit đã tồn tại | Cập nhật object hiện có (re-sync, tái sử dụng thay vì tạo mới) |
 | `DestroyObject(unitId, obj)` | Nhận `BatchLeave` hoặc `SyncLeave` | Hủy object, cleanup resource |
 | `OnEvent(unitId, obj, eventName, data, meta)` | Nhận `UnitEventMsg` | Xử lý event từ unit. `meta.Transport` cho biết event đến qua TCP hay UDP |
@@ -222,30 +230,35 @@ await client.ConnectServer();
 ### Implement IProvider
 
 ```csharp
-public class HeroProvider : IProvider
+public class Hero : IAlive
+{
+    public bool IsAlive { get; set; } = true;
+    // ... your fields
+}
+
+public class HeroProvider : IProvider<Hero>
 {
     public string UnitType => "hero";
 
-    public object CreateObject(long unitId, byte[] data)
+    public Hero CreateObject(long unitId, byte[] data)
     {
-        // Unity: Instantiate(prefab) as GameObject
-        var go = new object();
+        var hero = new Hero();
         Console.WriteLine($"[Client] Tạo hero {unitId}, data={data?.Length ?? 0} bytes");
-        return go;
+        return hero;
     }
 
-    public void UpdateObject(long unitId, object obj, byte[] data)
+    public void UpdateObject(long unitId, Hero obj, byte[] data)
     {
-        // Unity: cập nhật dữ liệu trên GameObject đã có
+        // Cập nhật dữ liệu trên Hero đã có
     }
 
-    public void DestroyObject(long unitId, object obj)
+    public void DestroyObject(long unitId, Hero obj)
     {
-        // Unity: Destroy((GameObject)obj)
+        obj.IsAlive = false;
         Console.WriteLine($"[Client] Hủy hero {unitId}");
     }
 
-    public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+    public void OnEvent(long unitId, Hero obj, string eventName, byte[] data, EventMeta meta)
     {
         if (meta.Transport == EventTransport.Udp)
         {
@@ -303,7 +316,7 @@ Update() mỗi frame
   │
   ├─ CleanDeadUnits()
   │   ├─ Duyệt _units, kiểm tra IsAlive
-  │   ├─ Unit dead (WeakReference mất) → DestroyObject + xóa khỏi _units
+  │   ├─ Unit dead (IAlive.IsAlive == false) → DestroyObject + xóa khỏi _units
   │   └─ Unit alive → tiếp tục
   │
   ├─ Build PingUnitsCmd
@@ -319,7 +332,7 @@ Update() mỗi frame
 
 **CleanDeadUnits** (`PubSubClient.cs:162-180`):
 - Mỗi lần `Tick()`, trước khi build ping, client duyệt toàn bộ `_units`
-- Nếu `unit.IsAlive == false` (GameObject bị GC collect hoặc Destroy): gọi `DestroyObject` trên provider, xóa khỏi `_units`
+- Nếu `unit.IsAlive == false` (target set `IAlive.IsAlive = false`): gọi `DestroyObject` trên provider, xóa khỏi `_units`
 - Đảm bảo ping chỉ chứa unit thực sự còn sống
 
 **Deduplication:** `Tick()` tự kiểm tra `_lastPingTimestamp` — chỉ gửi ping khi đủ `PingIntervalMs`. Bạn có thể gọi `Tick()` mỗi frame mà không lo spam.
@@ -388,26 +401,26 @@ MoveWatcher(position, radius)
 
 **Deduplication:** So sánh `(x, y, radius)` hiện tại với lần gửi trước. Chỉ gửi khi thực sự thay đổi — tránh spam network khi nhân vật đứng yên.
 
-### 4. Unit tracking với WeakReference
+### 4. Unit tracking với IAlive
 
 ```
 Client _units: Dictionary<(long Id, string Type), Unit>
 
 Unit (client-side):
   ├─ Id, Version, Type
-  └─ WeakReference<object> → GameObject
+  └─ IAlive _target → game object (Hero, Mob, ...)
 
 Vòng đời:
-  1. Nhận BatchEnter/SyncEnter → CreateObject → Unit(obj) với WeakReference
-  2. Tick() → CleanDeadUnits → kiểm tra Unit.IsAlive
-     ├─ Alive (WeakReference còn target) → giữ lại trong ping
-     └─ Dead (GC collected / Destroy) → DestroyObject + xóa khỏi _units
+  1. Nhận BatchEnter/SyncEnter → CreateObject → Unit(obj) với IAlive
+  2. Tick() → CleanDeadUnits → kiểm tra Unit.IsAlive (delegate qua IAlive.IsAlive)
+     ├─ Alive (target.IsAlive == true) → giữ lại trong ping
+     └─ Dead (target.IsAlive == false) → DestroyObject + xóa khỏi _units
   3. Nhận BatchLeave/SyncLeave → DestroyObject + xóa khỏi _units
 ```
 
-**Cơ chế an toàn GC:**
-- Client giữ `WeakReference` tới GameObject, không phải strong reference
-- Nếu GameObject bị destroy từ bên ngoài (vd: scene unload), `IsAlive` → false
+**Cơ chế lifecycle:**
+- Unit giữ strong reference tới target object (IAlive)
+- Target phải set `IsAlive = false` khi không còn dùng (vd: `DestroyObject` gọi `obj.IsAlive = false`)
 - Lần `Tick()` tiếp theo, `CleanDeadUnits` phát hiện và dọn dẹp
 - Server sẽ nhận ping thiếu unit → `SyncLeave` (nếu unit thực sự không còn trên server) hoặc `SyncEnter` (re-sync nếu unit vẫn còn)
 

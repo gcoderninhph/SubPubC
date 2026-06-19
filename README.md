@@ -67,7 +67,7 @@ pubSub.OnUnitEvent(tuple =>
 // Thêm watcher
 pubSub.AddWatcher(watcherId: 1, position: V(0, 0), radius: 200f);
 
-// Tạo unit async
+// Tạo unit async — target phải implement IAlive
 var target = new MyGameObject();
 var unit = await pubSub.CreateUnitAsync<MyGameObject>(
     id: 42, type: "hero", position: V(50, 50), target: target
@@ -194,31 +194,35 @@ await client.ConnectServer();
 // Khi nhân vật di chuyển, gọi MoveWatcher():
 //   pubSubModule.Get().MoveWatcher(newPosition, radius);
 
-// Provider mẫu
-public class HeroProvider : IProvider
+// Provider mẫu — implement IProvider<T> với T : IAlive
+public class Hero : IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public class HeroProvider : IProvider<Hero>
 {
     public string UnitType => "hero";
 
-    public object CreateObject(long unitId, byte[] data)
+    public Hero CreateObject(long unitId, byte[] data)
     {
-        // Tạo GameObject từ prefab, áp dụng data...
-        var go = new object();
+        var hero = new Hero();
         Console.WriteLine($"[Client] Tạo hero {unitId}");
-        return go;
+        return hero;
     }
 
-    public void UpdateObject(long unitId, object obj, byte[] data)
+    public void UpdateObject(long unitId, Hero obj, byte[] data)
     {
-        // Cập nhật GameObject đã có (re-sync)
+        // Cập nhật Hero đã có (re-sync)
     }
 
-    public void DestroyObject(long unitId, object obj)
+    public void DestroyObject(long unitId, Hero obj)
     {
-        // Hủy GameObject
+        obj.IsAlive = false;
         Console.WriteLine($"[Client] Hủy hero {unitId}");
     }
 
-    public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
+    public void OnEvent(long unitId, Hero obj, string eventName, byte[] data, EventMeta meta)
     {
         if (meta.Transport == EventTransport.Udp)
         {
@@ -237,7 +241,7 @@ public class HeroProvider : IProvider
 2. Server so sánh version → trả về `SyncEnter` (unit mới/thay đổi) hoặc `SyncLeave` (unit đã mất)
 3. Client nhận `PubSub.Evt` qua TCP → `HandleBatchEnter/HandleSyncEnter/HandleBatchLeave/HandleSyncLeave`
 4. Provider `CreateObject/DestroyObject` được gọi để tạo/hủy GameObject tương ứng
-5. Unit track bằng `WeakReference` — nếu GameObject bị GC collect, unit tự xóa khỏi danh sách ping
+5. Unit track bằng `IAlive` — khi target set `IsAlive = false`, unit tự xóa khỏi danh sách ping
 
 ---
 
@@ -247,7 +251,7 @@ public class HeroProvider : IProvider
 |------|----------|
 | [docs/Server.md](docs/Server.md) | PubSubLib chi tiết: API, cấu hình, luồng xử lý nội bộ, standalone vs Natify |
 | [docs/Router.md](docs/Router.md) | PubSubLib.Router chi tiết: bridge client-server, map connection, demux event |
-| [docs/Client.md](docs/Client.md) | PubSubLib.Client chi tiết: ping cycle, IProvider, Unit tracking, WeakReference |
+| [docs/Client.md](docs/Client.md) | PubSubLib.Client chi tiết: ping cycle, IProvider<T>, Unit tracking, IAlive |
 
 ---
 
@@ -259,7 +263,8 @@ SubPubC.sln
 │   ├── IPubSub.cs            # Public interface
 │   ├── PubSub.cs             # Core implementation
 │   ├── IUnit.cs              # Unit interface
-│   ├── Unit.cs               # Unit implementation (WeakReference)
+│   ├── IAlive.cs             # IAlive interface
+│   ├── Unit.cs               # Unit implementation (IAlive)
 │   ├── Watcher.cs            # Watcher (vị trí, bán kính, known types)
 │   ├── EventChannel.cs       # Worker thread (Channel<Action>)
 │   ├── Cell.cs               # Grid cell
@@ -271,7 +276,8 @@ SubPubC.sln
 │   ├── PubSubClient.cs        # Client implementation
 │   ├── IPubSubClientModule.cs # Module interface (IClientModule)
 │   ├── PubSubClientModule.cs  # Bridges MyConnection events
-│   ├── IProvider.cs           # Factory tạo/hủy GameObject, OnEvent
+│   ├── IProvider.cs           # Factory (IProvider<T>), IAlive interface
+│   ├── IAlive.cs              # IAlive interface
 │   ├── EventMeta.cs           # EventTransport enum (Tcp/Udp)
 │   └── Config.cs              # PingIntervalMs
 │
@@ -289,8 +295,8 @@ SubPubC.sln
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.3.0" />              <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.4.0" />       <!-- Game client -->
+<PackageReference Include="PubSubLib" Version="1.4.0" />              <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="1.5.0" />       <!-- Game client -->
 <PackageReference Include="PubSubLib.Router" Version="1.3.0" />       <!-- NATS bridge -->
 <PackageReference Include="PubSubLib.Contracts" Version="1.3.0" />    <!-- Protobuf messages -->
 ```

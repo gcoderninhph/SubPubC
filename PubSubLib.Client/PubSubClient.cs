@@ -124,7 +124,7 @@ internal sealed class PubSubClient : IPubSubClient
             return;
 
         var key = (msg.UnitId, msg.UnitType);
-        if (_units.TryGetValue(key, out var existing) && existing.Target is { } target)
+        if (_units.TryGetValue(key, out var existing) && existing.Target is IAlive target)
         {
             provider.UpdateObject(msg.UnitId, target, msg.Data.ToByteArray());
             _units[key] = new Unit(msg.UnitId, msg.Version, msg.UnitType, target);
@@ -144,7 +144,7 @@ internal sealed class PubSubClient : IPubSubClient
                 continue;
 
             var key = (item.Id, item.Type);
-            if (_units.TryGetValue(key, out var existing) && existing.Target is { } target)
+        if (_units.TryGetValue(key, out var existing) && existing.Target is IAlive target)
             {
                 provider.UpdateObject(item.Id, target, item.Data.ToByteArray());
                 _units[key] = new Unit(item.Id, item.Version, item.Type, target);
@@ -165,7 +165,7 @@ internal sealed class PubSubClient : IPubSubClient
 
         if (_providers.TryGetValue(msg.UnitType, out var provider))
         {
-            if (unit.Target is { } target)
+            if (unit.Target is IAlive target)
                 DestroyUnitObject(provider, msg.UnitId, target);
         }
         _units.Remove(key);
@@ -183,7 +183,7 @@ internal sealed class PubSubClient : IPubSubClient
 
                 if (_providers.TryGetValue(group.Type, out var provider))
                 {
-                    if (unit.Target is { } target)
+                    if (unit.Target is IAlive target)
                         DestroyUnitObject(provider, unitId, target);
                 }
                 _units.Remove(key);
@@ -200,7 +200,7 @@ internal sealed class PubSubClient : IPubSubClient
         if (!_units.TryGetValue(key, out var unit))
             return;
 
-        if (unit.Target is { } target)
+        if (unit.Target is IAlive target)
         {
             var meta = new EventMeta(transport);
             provider.OnEvent(msg.UnitId, target, msg.EventName, msg.Data.ToByteArray(), meta);
@@ -216,7 +216,7 @@ internal sealed class PubSubClient : IPubSubClient
             {
                 if (_providers.TryGetValue(key.Type, out var provider))
                 {
-                    if (unit.Target is { } target)
+                    if (unit.Target is IAlive target)
                         DestroyUnitObject(provider, key.Id, target);
                 }
                 deadKeys.Add(key);
@@ -227,12 +227,12 @@ internal sealed class PubSubClient : IPubSubClient
             _units.Remove(key);
     }
 
-    private static object CreateUnitObject(IProvider provider, long unitId, Google.Protobuf.ByteString data)
+    private static IAlive CreateUnitObject(IProvider provider, long unitId, Google.Protobuf.ByteString data)
     {
         return provider.CreateObject(unitId, data.ToByteArray());
     }
 
-    private static void DestroyUnitObject(IProvider provider, long unitId, object target)
+    private static void DestroyUnitObject(IProvider provider, long unitId, IAlive target)
     {
         provider.DestroyObject(unitId, target);
     }
@@ -241,7 +241,7 @@ internal sealed class PubSubClient : IPubSubClient
     {
         foreach (var (key, unit) in _units)
         {
-            if (unit.IsAlive && unit.Target is { } target
+            if (unit.IsAlive && unit.Target is IAlive target
                 && _providers.TryGetValue(key.Type, out var provider))
             {
                 provider.DestroyObject(key.Id, target);

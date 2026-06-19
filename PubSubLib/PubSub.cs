@@ -39,7 +39,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
 
     // ===== IPubSub =====
 
-    public void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class
+    public void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class, IAlive
     {
         _channel.Enqueue(() =>
         {
@@ -50,7 +50,7 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         });
     }
 
-    public Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class
+    public Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class, IAlive
     {
         var tcs = new TaskCompletionSource<IUnit>();
         _channel.Enqueue(() =>

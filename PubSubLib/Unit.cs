@@ -4,7 +4,7 @@ internal class Unit : IUnit
 {
     private Vector2 _position;
     private string _currentCellId = "";
-    private WeakReference<object>? _weakRef;
+    private IAlive? _target;
     private byte[]? _data;
     private int _version;
     internal IPubSubInternal? PubSub;
@@ -24,21 +24,13 @@ internal class Unit : IUnit
         }
     }
 
-    public bool IsAlive => _weakRef != null && _weakRef.TryGetTarget(out _);
+    public bool IsAlive => _target?.IsAlive ?? false;
 
     public int Version => _version;
 
     public byte[]? Data { get => _data; set { _data = value; _version++; } }
 
-    public object? Target
-    {
-        get
-        {
-            if (_weakRef != null && _weakRef.TryGetTarget(out var t))
-                return t;
-            return null;
-        }
-    }
+    public object? Target => _target;
 
     void IUnit.PublishEvent(string eventName, object? data, bool reliable)
     {
@@ -56,11 +48,11 @@ internal class Unit : IUnit
         set => _currentCellId = value;
     }
 
-    internal Unit(long id, string type, Vector2 position, object target)
+    internal Unit(long id, string type, Vector2 position, IAlive target)
     {
         Id = id;
         Type = type;
         _position = position;
-        _weakRef = new WeakReference<object>(target);
+        _target = target;
     }
 }
