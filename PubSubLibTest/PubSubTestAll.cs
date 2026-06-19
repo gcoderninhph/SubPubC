@@ -21,7 +21,7 @@ public class PubSubTestAll : IDisposable
     private IPubSub _pubSub;
     private IPubSubClientModule _pubSubClientModule;
 
-    private static readonly Dictionary<long, GameObjectTest> clientUnit = new();
+    private static readonly Dictionary<long, object> clientUnit = new();
     private static readonly Dictionary<long, MyUnit> serverUnit = new();
 
     private static Vector2 V(float x, float y) => new Vector2 { x = x, y = y };
@@ -356,13 +356,17 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, byte[] data)
         {
-            var ob1 = new GameObjectTest();
+            var ob1 = new object();
             clientUnit[unitId] = ob1;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob1;
+        }
+
+        public void UpdateObject(long unitId, object obj, byte[] data)
+        {
         }
 
         public void DestroyObject(long unitId, object obj)
@@ -383,9 +387,9 @@ public class PubSubTestAll : IDisposable
         public string UnitType => "T1";
         private int _expectedCreateCount;
 
-        public object CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, byte[] data)
         {
-            var ob = new GameObjectTest();
+            var ob = new object();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
             {
@@ -396,6 +400,10 @@ public class PubSubTestAll : IDisposable
                     ResyncSignal?.Set();
             }
             return ob;
+        }
+
+        public void UpdateObject(long unitId, object obj, byte[] data)
+        {
         }
 
         public void DestroyObject(long unitId, object obj)
@@ -415,13 +423,17 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, byte[] data)
         {
-            var ob = new GameObjectTest();
+            var ob = new object();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob;
+        }
+
+        public void UpdateObject(long unitId, object obj, byte[] data)
+        {
         }
 
         public void DestroyObject(long unitId, object obj)
@@ -445,15 +457,19 @@ public class PubSubTestAll : IDisposable
         public long Unit2Id = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, byte[] data)
         {
-            var ob = new GameObjectTest();
+            var ob = new object();
             clientUnit[unitId] = ob;
             if (unitId == Unit1Id)
                 Unit1Created?.Set();
             if (unitId == Unit2Id)
                 Unit2Entered?.Set();
             return ob;
+        }
+
+        public void UpdateObject(long unitId, object obj, byte[] data)
+        {
         }
 
         public void DestroyObject(long unitId, object obj)
@@ -475,13 +491,17 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public object CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, byte[] data)
         {
-            var ob = new GameObjectTest();
+            var ob = new object();
             clientUnit[unitId] = ob;
             if (unitId == ExpectedUnitId)
                 CreatedSignal?.Set();
             return ob;
+        }
+
+        public void UpdateObject(long unitId, object obj, byte[] data)
+        {
         }
 
         public void DestroyObject(long unitId, object obj)

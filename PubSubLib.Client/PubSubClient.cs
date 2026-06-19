@@ -100,9 +100,17 @@ internal sealed class PubSubClient : IPubSubClient
         if (!_providers.TryGetValue(msg.UnitType, out var provider))
             return;
 
-        var obj = CreateUnitObject(provider, msg.UnitId, msg.Version, msg.Data);
         var key = (msg.UnitId, msg.UnitType);
-        _units[key] = new Unit(msg.UnitId, msg.Version, msg.UnitType, obj);
+        if (_units.TryGetValue(key, out var existing) && existing.Target is { } target)
+        {
+            provider.UpdateObject(msg.UnitId, target, msg.Data.ToByteArray());
+            _units[key] = new Unit(msg.UnitId, msg.Version, msg.UnitType, target);
+        }
+        else
+        {
+            var obj = CreateUnitObject(provider, msg.UnitId, msg.Data);
+            _units[key] = new Unit(msg.UnitId, msg.Version, msg.UnitType, obj);
+        }
     }
 
     internal void HandleSyncEnter(SyncEnterMsg msg)
@@ -112,9 +120,17 @@ internal sealed class PubSubClient : IPubSubClient
             if (!_providers.TryGetValue(item.Type, out var provider))
                 continue;
 
-            var obj = CreateUnitObject(provider, item.Id, item.Version, item.Data);
             var key = (item.Id, item.Type);
-            _units[key] = new Unit(item.Id, item.Version, item.Type, obj);
+            if (_units.TryGetValue(key, out var existing) && existing.Target is { } target)
+            {
+                provider.UpdateObject(item.Id, target, item.Data.ToByteArray());
+                _units[key] = new Unit(item.Id, item.Version, item.Type, target);
+            }
+            else
+            {
+                var obj = CreateUnitObject(provider, item.Id, item.Data);
+                _units[key] = new Unit(item.Id, item.Version, item.Type, obj);
+            }
         }
     }
 
@@ -188,9 +204,9 @@ internal sealed class PubSubClient : IPubSubClient
             _units.Remove(key);
     }
 
-    private static object CreateUnitObject(IProvider provider, long unitId, int version, Google.Protobuf.ByteString data)
+    private static object CreateUnitObject(IProvider provider, long unitId, Google.Protobuf.ByteString data)
     {
-        return provider.CreateObject(unitId, version, data.ToByteArray());
+        return provider.CreateObject(unitId, data.ToByteArray());
     }
 
     private static void DestroyUnitObject(IProvider provider, long unitId, object target)
