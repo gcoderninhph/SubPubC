@@ -1,6 +1,3 @@
-#if UNITY_ENGINE
-using Vector2 = UnityEngine.Vector2;
-#endif
 namespace PubSubLib.Client;
 
 public interface IPubSubClient

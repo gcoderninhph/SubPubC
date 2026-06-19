@@ -1,6 +1,3 @@
-#if UNITY_ENGINE
-using Vector2 = UnityEngine.Vector2;
-#endif
 using System.Collections.Generic;
 using System.Diagnostics;
 using MyConnection;
@@ -167,13 +164,7 @@ internal sealed class PubSubClient : IPubSubClient
         if (unit.Target is { } target)
         {
             var meta = new EventMeta(transport);
-#if UNITY_ENGINE
-            if (target is UnityEngine.GameObject go)
-                provider.OnEvent(msg.UnitId, go, msg.EventName, msg.Data.ToByteArray(), meta);
-#else
-            if (target is GameObjectTest go)
-                provider.OnEvent(msg.UnitId, go, msg.EventName, msg.Data.ToByteArray(), meta);
-#endif
+            provider.OnEvent(msg.UnitId, target, msg.EventName, msg.Data.ToByteArray(), meta);
         }
     }
 
@@ -204,12 +195,6 @@ internal sealed class PubSubClient : IPubSubClient
 
     private static void DestroyUnitObject(IProvider provider, long unitId, object target)
     {
-#if UNITY_ENGINE
-        if (target is UnityEngine.GameObject go)
-            provider.DestroyObject(unitId, go);
-#else
-        if (target is GameObjectTest go)
-            provider.DestroyObject(unitId, go);
-#endif
+        provider.DestroyObject(unitId, target);
     }
 }

@@ -356,7 +356,7 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, int version, byte[] data)
         {
             var ob1 = new GameObjectTest();
             clientUnit[unitId] = ob1;
@@ -365,12 +365,12 @@ public class PubSubTestAll : IDisposable
             return ob1;
         }
 
-        public void DestroyObject(long unitId, GameObjectTest obj)
+        public void DestroyObject(long unitId, object obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
@@ -383,7 +383,7 @@ public class PubSubTestAll : IDisposable
         public string UnitType => "T1";
         private int _expectedCreateCount;
 
-        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, int version, byte[] data)
         {
             var ob = new GameObjectTest();
             clientUnit[unitId] = ob;
@@ -398,12 +398,12 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void DestroyObject(long unitId, GameObjectTest obj)
+        public void DestroyObject(long unitId, object obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
@@ -415,7 +415,7 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, int version, byte[] data)
         {
             var ob = new GameObjectTest();
             clientUnit[unitId] = ob;
@@ -424,14 +424,14 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void DestroyObject(long unitId, GameObjectTest obj)
+        public void DestroyObject(long unitId, object obj)
         {
             clientUnit.Remove(unitId);
             if (unitId == ExpectedUnitId)
                 DestroyedSignal?.Set();
         }
 
-        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
@@ -445,7 +445,7 @@ public class PubSubTestAll : IDisposable
         public long Unit2Id = -1;
         public string UnitType => "T1";
 
-        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, int version, byte[] data)
         {
             var ob = new GameObjectTest();
             clientUnit[unitId] = ob;
@@ -456,14 +456,14 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void DestroyObject(long unitId, GameObjectTest obj)
+        public void DestroyObject(long unitId, object obj)
         {
             clientUnit.Remove(unitId);
             if (unitId == Unit1Id)
                 Unit1Left?.Set();
         }
 
-        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
         {
         }
     }
@@ -475,7 +475,7 @@ public class PubSubTestAll : IDisposable
         public long ExpectedUnitId = -1;
         public string UnitType => "T1";
 
-        public GameObjectTest CreateObject(long unitId, int version, byte[] data)
+        public object CreateObject(long unitId, int version, byte[] data)
         {
             var ob = new GameObjectTest();
             clientUnit[unitId] = ob;
@@ -484,12 +484,12 @@ public class PubSubTestAll : IDisposable
             return ob;
         }
 
-        public void DestroyObject(long unitId, GameObjectTest obj)
+        public void DestroyObject(long unitId, object obj)
         {
             clientUnit.Remove(unitId);
         }
 
-        public void OnEvent(long unitId, GameObjectTest obj, string eventName, byte[] data, EventMeta meta)
+        public void OnEvent(long unitId, object obj, string eventName, byte[] data, EventMeta meta)
         {
             if (unitId == ExpectedUnitId)
                 EventSignal?.Set();

@@ -1,7 +1,0 @@
-{
-  "name": "com.ninh.pubsub.client",
-  "version": "1.1.0",
-  "displayName": "PubSub Client",
-  "description": "PubSub client for Unity - receive events, create/destroy GameObjects",
-  "unity": "2021.3"
-}
