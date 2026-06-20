@@ -92,6 +92,11 @@ internal sealed class PubSubClient : IPubSubClient
     public IPubSubClient AddProvider(IProvider provider)
     {
         _providers[provider.UnitType] = provider;
+        if (provider is IProviderWithClient pc)
+        {
+            pc.SetClient(this);
+            pc.OnStart();
+        }
         return this;
     }
 
@@ -248,6 +253,13 @@ internal sealed class PubSubClient : IPubSubClient
             }
         }
         _units.Clear();
+
+        foreach (var provider in _providers.Values)
+        {
+            if (provider is IProviderWithClient pc)
+                pc.OnDispose();
+        }
+
         _providers.Clear();
         _client = null;
     }

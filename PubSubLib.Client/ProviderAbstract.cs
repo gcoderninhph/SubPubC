@@ -2,11 +2,16 @@ using System.Collections.Generic;
 
 namespace PubSubLib.Client;
 
-public abstract class ProviderAbstract<T> : IProvider<T> where T : class, IAlive
+public abstract class ProviderAbstract<T> : IProvider<T>, IProviderWithClient where T : class, IAlive
 {
-    private readonly IPubSubClient _client;
+    private IPubSubClient? _client;
 
-    protected ProviderAbstract(IPubSubClient client) => _client = client;
+    void IProviderWithClient.SetClient(IPubSubClient client) => _client = client;
+    void IProviderWithClient.OnStart() => OnStart();
+    void IProviderWithClient.OnDispose() => OnDispose();
+
+    protected virtual void OnStart() { }
+    protected virtual void OnDispose() { }
 
     public abstract string UnitType { get; }
     public abstract T CreateObject(long unitId, byte[] data);
@@ -17,14 +22,17 @@ public abstract class ProviderAbstract<T> : IProvider<T> where T : class, IAlive
     public IReadOnlyList<IUnit<T>> GetAllUnits()
     {
         var list = new List<IUnit<T>>();
-        foreach (var unit in _client.GetAllUnitsByType(UnitType))
-            list.Add(new TypedUnit<T>(unit));
+        if (_client != null)
+        {
+            foreach (var unit in _client.GetAllUnitsByType(UnitType))
+                list.Add(new TypedUnit<T>(unit));
+        }
         return list;
     }
 
     public IUnit<T>? GetUnit(long unitId)
     {
-        var unit = _client.GetUnit(unitId, UnitType);
+        var unit = _client?.GetUnit(unitId, UnitType);
         return unit == null ? null : new TypedUnit<T>(unit);
     }
 }
