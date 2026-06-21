@@ -89,8 +89,8 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine();
         if (!string.IsNullOrEmpty(info.Namespace))
         {
-            sb.AppendLine($"namespace {info.Namespace};");
-            sb.AppendLine();
+            sb.AppendLine($"namespace {info.Namespace}");
+            sb.AppendLine("{");
         }
         sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IPlayerData, global::PubSubLib.IPlayerDataInternal");
         sb.AppendLine("{");
@@ -150,6 +150,8 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
         sb.AppendLine("    }");
         sb.AppendLine("}");
+        if (!string.IsNullOrEmpty(info.Namespace))
+            sb.AppendLine("}");
 
         context.AddSource($"{info.ClassName}.g.cs", sb.ToString());
     }

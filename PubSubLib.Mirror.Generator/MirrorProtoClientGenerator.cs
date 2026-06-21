@@ -82,8 +82,8 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine();
         if (!string.IsNullOrEmpty(info.Namespace))
         {
-            sb.AppendLine($"namespace {info.Namespace};");
-            sb.AppendLine();
+            sb.AppendLine($"namespace {info.Namespace}");
+            sb.AppendLine("{");
         }
         sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Mirror.IPlayerMirrorClient");
         sb.AppendLine("{");
@@ -129,6 +129,8 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("        OnCommit(commit);");
         sb.AppendLine("    }");
         sb.AppendLine("}");
+        if (!string.IsNullOrEmpty(info.Namespace))
+            sb.AppendLine("}");
 
         context.AddSource($"{info.ClassName}.g.cs", sb.ToString());
     }
