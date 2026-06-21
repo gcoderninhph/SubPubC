@@ -120,6 +120,7 @@ message PlayerSpeaksEvent {
     string data_name = 1;
     int64 player_id = 2;
     bytes data = 3;
+    string commit = 4;
 }
 
 // Topic: PlayerSpeaks.Welcome (Router -> Client via MyConnection TCP)

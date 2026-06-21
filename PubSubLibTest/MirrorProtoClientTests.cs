@@ -35,7 +35,7 @@ public class MirrorProtoClientTests
         var bytes = src.ToByteArray();
 
         var mirror = new RemoveWatcherMirrorClient();
-        mirror.ApplyUpdate(bytes);
+        mirror.ApplyUpdate(bytes, "test_commit");
 
         Assert.Equal(42L, mirror.WatcherId);
     }
@@ -54,5 +54,21 @@ public class MirrorProtoClientTests
         Assert.NotNull(mirror);
         mirror!.PlayerId = 123;
         Assert.Equal(123L, mirror.PlayerId);
+    }
+
+    [Fact]
+    public void OnCommit_Invoked_After_ApplyUpdate()
+    {
+        var src = new RemoveWatcherCmd { WatcherId = 42 };
+        var bytes = src.ToByteArray();
+
+        var mirror = new RemoveWatcherMirrorClient();
+        string? received = null;
+        mirror.OnCommit(c => received = c);
+
+        mirror.ApplyUpdate(bytes, "player_did_action");
+
+        Assert.Equal("player_did_action", received);
+        Assert.Equal(42L, mirror.WatcherId);
     }
 }

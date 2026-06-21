@@ -22,43 +22,44 @@ public class MirrorProtoTests
     }
 
     [Fact]
-    public void SetProperty_NotifiesOnChange()
+    public void Commit_NotifiesOnChange_WithContent()
     {
         var mirror = new RemoveWatcherMirror();
-        byte[]? data = null;
-        mirror.OnChange(bytes => data = bytes);
+        (byte[] data, string commit)? received = null;
+        mirror.OnChange((bytes, commit) => received = (bytes, commit));
 
         mirror.WatcherId = 42;
-        MirrorProtoBus.Flush();
+        mirror.Commit("test_reason");
 
-        Assert.NotNull(data);
-        Assert.True(data!.Length > 0);
+        Assert.NotNull(received);
+        Assert.Equal("test_reason", received!.Value.commit);
+        Assert.True(received!.Value.data.Length > 0);
     }
 
     [Fact]
-    public void OnChange_MultipleHandlers()
+    public void Commit_Notifies_MultipleHandlers()
     {
         var mirror = new RemoveWatcherMirror();
         int count = 0;
-        mirror.OnChange(_ => count++);
-        mirror.OnChange(_ => count++);
+        mirror.OnChange((_, _) => count++);
+        mirror.OnChange((_, _) => count++);
 
         mirror.WatcherId = 7;
-        MirrorProtoBus.Flush();
+        mirror.Commit("multi");
 
         Assert.Equal(2, count);
     }
 
     [Fact]
-    public void OnChange_NotCalled_WhenNoChange()
+    public void Commit_AlwaysFires_EvenWithoutFieldChange()
     {
         var mirror = new RemoveWatcherMirror();
         bool called = false;
-        mirror.OnChange(_ => called = true);
+        mirror.OnChange((_, _) => called = true);
 
-        MirrorProtoBus.Flush();
+        mirror.Commit("no_change");
 
-        Assert.False(called);
+        Assert.True(called);
     }
 
     [Fact]
@@ -66,20 +67,18 @@ public class MirrorProtoTests
     {
         var mirror = new RemoveWatcherMirror { WatcherId = 99 };
 
-        MirrorProtoBus.Flush();
-
         Assert.Equal(99L, mirror.WatcherId);
     }
 
     [Fact]
-    public void ByteArray_DeserializesCorrectly()
+    public void Commit_ByteArray_DeserializesCorrectly()
     {
         var mirror = new RemoveWatcherMirror();
         byte[]? data = null;
-        mirror.OnChange(bytes => data = bytes);
+        mirror.OnChange((bytes, _) => data = bytes);
 
         mirror.WatcherId = 100;
-        MirrorProtoBus.Flush();
+        mirror.Commit("deser");
 
         Assert.NotNull(data);
         var parsed = RemoveWatcherCmd.Parser.ParseFrom(data);
@@ -103,7 +102,6 @@ public class MirrorProtoTests
         var internalMirror = (IPlayerDataInternal)mirror;
         internalMirror.SetOnline(true);
         Assert.True(mirror.IsOnLine);
-        MirrorProtoBus.Flush();
     }
 
     [Fact]

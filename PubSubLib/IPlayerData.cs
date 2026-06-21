@@ -6,5 +6,7 @@ public interface IPlayerData
     bool IsOnLine { get; }
 
     string DataName { get; }
-    void OnChange(Action<byte[]> handler);
+
+    void OnChange(Action<byte[], string> handler);
+    void Commit(string commit);
 }

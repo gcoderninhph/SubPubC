@@ -101,6 +101,12 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("        return _mirrorProto;");
         sb.AppendLine("    }");
         sb.AppendLine();
+        sb.AppendLine("    private Action<string>? _onCommit;");
+        sb.AppendLine("    public void OnCommit(Action<string> handler)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        _onCommit += handler;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
 
         foreach (var f in info.Fields)
         {
@@ -119,11 +125,12 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    public void ApplyUpdate(byte[] data)");
+        sb.AppendLine("    public void ApplyUpdate(byte[] data, string commit)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var proto = {info.ProtoTypeFullName}.Parser.ParseFrom(data);");
         sb.AppendLine("        _mirrorProto = proto;");
         sb.AppendLine("        SyncFromProto();");
+        sb.AppendLine("        _onCommit?.Invoke(commit);");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

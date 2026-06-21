@@ -27,7 +27,7 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 
     private void OnEvent(PlayerSpeaksEvent evt)
     {
-        _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray());
+        _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit);
     }
 
     public IPlayerSpeaksClient Get()

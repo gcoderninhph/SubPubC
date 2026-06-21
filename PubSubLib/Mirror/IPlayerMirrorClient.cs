@@ -6,5 +6,7 @@ public interface IPlayerMirrorClient
 
     string DataName { get; }
 
-    void ApplyUpdate(byte[] data);
+    void ApplyUpdate(byte[] data, string commit);
+
+    void OnCommit(Action<string> handler);
 }

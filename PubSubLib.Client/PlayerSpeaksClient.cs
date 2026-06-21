@@ -35,10 +35,10 @@ internal sealed class PlayerSpeaksClient : IPlayerSpeaksClient
             _dataByName.TryRemove(removed.DataName, out _);
     }
 
-    internal void ApplyUpdate(string dataName, byte[] data)
+    internal void ApplyUpdate(string dataName, byte[] data, string commit)
     {
         if (_dataByName.TryGetValue(dataName, out var mirror))
-            mirror.ApplyUpdate(data);
+            mirror.ApplyUpdate(data, commit);
     }
 
     public void Dispose()

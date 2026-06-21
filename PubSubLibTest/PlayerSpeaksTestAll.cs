@@ -123,7 +123,7 @@ public class PlayerSpeaksTestAll : IDisposable
         await Task.Delay(2000);
 
         serverData.WatcherId = 999;
-        MirrorProtoBus.Flush();
+        serverData.Commit("update_watcher");
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
@@ -134,6 +134,45 @@ public class PlayerSpeaksTestAll : IDisposable
         }
 
         Assert.Equal(999L, clientData!.WatcherId);
+    }
+
+    [Fact]
+    public async Task FullStack_ClientReceivesCommitMessage()
+    {
+        var playerId = 3L;
+
+        CreateRouter();
+        await CreateServerAsync();
+
+        var serverData = _manager.CreateData<TestPlayerData>(playerId);
+
+        using var handle = await CreateClientAsync("ctest", playerId);
+
+        handle.ClientData.AddData<TestPlayerDataClient>();
+        var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
+
+        string? commitMsg = null;
+        clientData!.OnCommit(c => commitMsg = c);
+
+        await Task.Delay(2000);
+        Assert.True(serverData.IsOnLine, "serverIsOnLine");
+
+        serverData.WatcherId = 777;
+        serverData.Commit("battle_won");
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (clientData!.WatcherId == 777)
+                break;
+            await Task.Delay(50);
+        }
+        Assert.Equal(777L, clientData!.WatcherId);
+
+        await Task.Delay(500);
+
+        Assert.NotNull(commitMsg);
+        Assert.Equal("battle_won", commitMsg);
     }
 
     [Fact]
@@ -160,9 +199,9 @@ public class PlayerSpeaksTestAll : IDisposable
 
         await Task.Delay(2000);
 
-        // Player 1 changes data
+        // Player 1 commits
         serverData1.WatcherId = 111;
-        MirrorProtoBus.Flush();
+        serverData1.Commit("p1_update");
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
@@ -174,9 +213,9 @@ public class PlayerSpeaksTestAll : IDisposable
         Assert.Equal(111L, clientData1!.WatcherId);
         Assert.NotEqual(111L, clientData2!.WatcherId);
 
-        // Player 2 changes data
+        // Player 2 commits
         serverData2.WatcherId = 222;
-        MirrorProtoBus.Flush();
+        serverData2.Commit("p2_update");
 
         deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)

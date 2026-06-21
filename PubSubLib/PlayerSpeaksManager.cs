@@ -55,7 +55,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         _data[key] = data;
         _lastActiveTicks[key] = DateTime.UtcNow.Ticks;
 
-        data.OnChange(bytes =>
+        data.OnChange((bytes, commit) =>
         {
             if (!data.IsOnLine)
                 return;
@@ -64,7 +64,8 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
             {
                 DataName = data.DataName,
                 PlayerId = playerId,
-                Data = ByteString.CopyFrom(bytes)
+                Data = ByteString.CopyFrom(bytes),
+                Commit = commit
             };
             _natify.Publish(EvtTopic, evt);
         });
