@@ -8,6 +8,9 @@ namespace PubSubLibTest;
 public partial class RemoveWatcherMirrorClient
 {
     private long _watcherId;
+
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
 }
 
 public class MirrorProtoClientTests
@@ -63,12 +66,9 @@ public class MirrorProtoClientTests
         var bytes = src.ToByteArray();
 
         var mirror = new RemoveWatcherMirrorClient();
-        string? received = null;
-        mirror.OnCommit(c => received = c);
-
         mirror.ApplyUpdate(bytes, "player_did_action");
 
-        Assert.Equal("player_did_action", received);
+        Assert.Equal("player_did_action", mirror.LastCommit);
         Assert.Equal(42L, mirror.WatcherId);
     }
 }

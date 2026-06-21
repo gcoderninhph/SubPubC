@@ -18,6 +18,9 @@ public partial class TestPlayerData
 public partial class TestPlayerDataClient
 {
     private long _watcherId;
+
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
 }
 
 public class PlayerSpeaksTestAll : IDisposable
@@ -151,9 +154,6 @@ public class PlayerSpeaksTestAll : IDisposable
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
 
-        string? commitMsg = null;
-        clientData!.OnCommit(c => commitMsg = c);
-
         await Task.Delay(2000);
         Assert.True(serverData.IsOnLine, "serverIsOnLine");
 
@@ -171,8 +171,8 @@ public class PlayerSpeaksTestAll : IDisposable
 
         await Task.Delay(500);
 
-        Assert.NotNull(commitMsg);
-        Assert.Equal("battle_won", commitMsg);
+        Assert.NotNull(clientData.LastCommit);
+        Assert.Equal("battle_won", clientData.LastCommit);
     }
 
     [Fact]
