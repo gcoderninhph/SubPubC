@@ -8,14 +8,14 @@ using System.Text;
 namespace PubSubLib.Mirror.Generator;
 
 [Generator(LanguageNames.CSharp)]
-public sealed class MirrorProtoGenerator : IIncrementalGenerator
+public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
 {
-    private const string MirrorProtoAttr = "PubSubLib.Mirror.MirrorProtoAttribute";
+    private const string AttrName = "PubSubLib.Mirror.MirrorProtoClientAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var classes = context.SyntaxProvider.ForAttributeWithMetadataName(
-            MirrorProtoAttr,
+            AttrName,
             predicate: static (node, _) => node is ClassDeclarationSyntax,
             transform: static (ctx, _) => TransformClass(ctx)
         );
@@ -37,13 +37,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         if (attr.ConstructorArguments.Length < 1 || attr.ConstructorArguments[0].Value is not INamedTypeSymbol protoType)
             return null;
 
-        string? dataName = null;
-        foreach (var namedArg in attr.NamedArguments)
-        {
-            if (namedArg.Key == "DataName" && namedArg.Value.Value is string dn)
-                dataName = dn;
-        }
-        dataName ??= protoType.Name;
+        var dataName = protoType.Name;
 
         var ns = classSymbol.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .TrimStartGlobalPrefix() ?? "";
@@ -91,16 +85,12 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             sb.AppendLine($"namespace {info.Namespace};");
             sb.AppendLine();
         }
-        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IPlayerData");
+        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Mirror.IPlayerMirrorClient");
         sb.AppendLine("{");
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
-        sb.AppendLine("    private Action<byte[]>? _onChange;");
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
         sb.AppendLine("    public long PlayerId { get => ___gs_playerId; set => ___gs_playerId = value; }");
-        sb.AppendLine();
-        sb.AppendLine("    private bool ___gs_isOnLine;");
-        sb.AppendLine("    public bool IsOnLine { get => ___gs_isOnLine; set => ___gs_isOnLine = value; }");
         sb.AppendLine();
         sb.AppendLine($"    public string DataName => \"{info.DataName}\";");
         sb.AppendLine();
@@ -111,27 +101,13 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine("        return _mirrorProto;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    public void OnChange(Action<byte[]> handler)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        _onChange += handler;");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    private void Notify(byte[] bytes)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        _onChange?.Invoke(bytes);");
-        sb.AppendLine("    }");
-        sb.AppendLine();
 
         foreach (var f in info.Fields)
         {
             sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
             sb.AppendLine("    {");
             sb.AppendLine($"        get => {f.FieldName};");
-            sb.AppendLine("        set");
-            sb.AppendLine("        {");
-            sb.AppendLine($"            {f.FieldName} = value;");
-            sb.AppendLine($"            global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(GetMirrorProto(), Notify, p => p.{f.PropertyName} = value);");
-            sb.AppendLine("        }");
+            sb.AppendLine($"        set => {f.FieldName} = value;");
             sb.AppendLine("    }");
             sb.AppendLine();
         }
@@ -142,49 +118,15 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         foreach (var f in info.Fields)
             sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
         sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    public void ApplyUpdate(byte[] data)");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var proto = {info.ProtoTypeFullName}.Parser.ParseFrom(data);");
+        sb.AppendLine("        _mirrorProto = proto;");
+        sb.AppendLine("        SyncFromProto();");
+        sb.AppendLine("    }");
         sb.AppendLine("}");
 
         context.AddSource($"{info.ClassName}.g.cs", sb.ToString());
-    }
-}
-
-internal static class StringExtensions
-{
-    public static string TrimStartGlobalPrefix(this string s)
-    {
-        const string prefix = "global::";
-        if (s.StartsWith(prefix))
-            return s.Substring(prefix.Length);
-        return s;
-    }
-}
-
-internal readonly struct FieldMapping
-{
-    public readonly string FieldName;
-    public readonly string PropertyName;
-    public readonly string TypeName;
-    public FieldMapping(string fieldName, string propertyName, string typeName)
-    {
-        FieldName = fieldName;
-        PropertyName = propertyName;
-        TypeName = typeName;
-    }
-}
-
-internal readonly struct MirrorClassInfo
-{
-    public readonly string Namespace;
-    public readonly string ClassName;
-    public readonly string ProtoTypeFullName;
-    public readonly string DataName;
-    public readonly FieldMapping[] Fields;
-    public MirrorClassInfo(string ns, string className, string protoTypeFullName, string dataName, FieldMapping[] fields)
-    {
-        Namespace = ns;
-        ClassName = className;
-        ProtoTypeFullName = protoTypeFullName;
-        DataName = dataName;
-        Fields = fields;
     }
 }

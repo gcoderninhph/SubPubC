@@ -112,3 +112,25 @@ message PublishEventCmd {
     bytes data = 4;
     bool use_udp = 5;
 }
+
+// ===== PlayerSpeaks =====
+// Topic: PlayerSpeaks.Evt (Server -> Router -> Client via MyConnection)
+
+message PlayerSpeaksEvent {
+    string data_name = 1;
+    int64 player_id = 2;
+    bytes data = 3;
+}
+
+// Topic: PlayerSpeaks.Welcome (Router -> Client via MyConnection TCP)
+
+message PlayerSpeaksWelcomeMsg {
+    int64 player_id = 1;
+}
+
+// Topic: PlayerSpeaks.Status (Router -> Server via Natify)
+
+message PlayerOnlineStatusMsg {
+    int64 player_id = 1;
+    bool is_online = 2;
+}
