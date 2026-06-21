@@ -98,9 +98,10 @@ public class MirrorProtoTests
     {
         var mirror = new RemoveWatcherMirror() as IPlayerData;
         Assert.NotNull(mirror);
-        mirror!.PlayerId = 42;
+        ((IPlayerDataInternal)mirror!).SetPlayerId(42);
         Assert.Equal(42, mirror.PlayerId);
-        mirror.IsOnLine = true;
+        var internalMirror = (IPlayerDataInternal)mirror;
+        internalMirror.SetOnline(true);
         Assert.True(mirror.IsOnLine);
         MirrorProtoBus.Flush();
     }

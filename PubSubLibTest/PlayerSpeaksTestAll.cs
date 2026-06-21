@@ -113,9 +113,9 @@ public class PlayerSpeaksTestAll : IDisposable
         CreateRouter();
         await CreateServerAsync();
 
-        using var handle = await CreateClientAsync("test", playerId);
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
-        serverData.IsOnLine = true;
+
+        using var handle = await CreateClientAsync("test", playerId);
 
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
@@ -145,15 +145,16 @@ public class PlayerSpeaksTestAll : IDisposable
         CreateRouter();
         await CreateServerAsync();
 
+        var serverData1 = _manager.CreateData<TestPlayerData>(player1Id);
+        var serverData2 = _manager.CreateData<TestPlayerData>(player2Id);
+
         // Player 1
         using var handle1 = await CreateClientAsync("p1", player1Id);
-        var serverData1 = _manager.CreateData<TestPlayerData>(player1Id);
         handle1.ClientData.AddData<TestPlayerDataClient>();
         var clientData1 = handle1.ClientData.GetData<TestPlayerDataClient>();
 
         // Player 2
         using var handle2 = await CreateClientAsync("p2", player2Id);
-        var serverData2 = _manager.CreateData<TestPlayerData>(player2Id);
         handle2.ClientData.AddData<TestPlayerDataClient>();
         var clientData2 = handle2.ClientData.GetData<TestPlayerDataClient>();
 

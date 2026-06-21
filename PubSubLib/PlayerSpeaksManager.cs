@@ -48,7 +48,8 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
 
     public T CreateData<T>(long playerId) where T : class, IPlayerData, new()
     {
-        var data = new T { PlayerId = playerId };
+        var data = new T();
+        ((IPlayerDataInternal)data).SetPlayerId(playerId);
         var key = new PlayerDataKey(data.DataName, playerId);
 
         _data[key] = data;
@@ -78,7 +79,8 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         {
             if (kv.Key.PlayerId == msg.PlayerId)
             {
-                kv.Value.IsOnLine = msg.IsOnline;
+                if (kv.Value is IPlayerDataInternal di)
+                    di.SetOnline(msg.IsOnline);
                 if (msg.IsOnline)
                     _lastActiveTicks[kv.Key] = DateTime.UtcNow.Ticks;
             }
@@ -100,7 +102,8 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                     if (now - kv.Value > timeout)
                     {
                         if (_data.TryRemove(kv.Key, out var stale))
-                            stale.IsOnLine = false;
+                            if (stale is IPlayerDataInternal di)
+                                di.SetOnline(false);
                         _lastActiveTicks.TryRemove(kv.Key, out _);
                     }
                 }

@@ -2,8 +2,8 @@
 
 public interface IPlayerData
 {
-    long PlayerId { get; set; }
-    bool IsOnLine { get; set; }
+    long PlayerId { get; }
+    bool IsOnLine { get; }
 
     string DataName { get; }
     void OnChange(Action<byte[]> handler);

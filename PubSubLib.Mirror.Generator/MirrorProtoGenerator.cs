@@ -91,16 +91,18 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             sb.AppendLine($"namespace {info.Namespace};");
             sb.AppendLine();
         }
-        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IPlayerData");
+        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IPlayerData, global::PubSubLib.IPlayerDataInternal");
         sb.AppendLine("{");
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
         sb.AppendLine("    private Action<byte[]>? _onChange;");
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
-        sb.AppendLine("    public long PlayerId { get => ___gs_playerId; set => ___gs_playerId = value; }");
+        sb.AppendLine("    public long PlayerId => ___gs_playerId;");
+        sb.AppendLine("    void global::PubSubLib.IPlayerDataInternal.SetPlayerId(long playerId) => ___gs_playerId = playerId;");
         sb.AppendLine();
         sb.AppendLine("    private bool ___gs_isOnLine;");
-        sb.AppendLine("    public bool IsOnLine { get => ___gs_isOnLine; set => ___gs_isOnLine = value; }");
+        sb.AppendLine("    public bool IsOnLine => ___gs_isOnLine;");
+        sb.AppendLine("    void global::PubSubLib.IPlayerDataInternal.SetOnline(bool isOnline) => ___gs_isOnLine = isOnline;");
         sb.AppendLine();
         sb.AppendLine($"    public string DataName => \"{info.DataName}\";");
         sb.AppendLine();
