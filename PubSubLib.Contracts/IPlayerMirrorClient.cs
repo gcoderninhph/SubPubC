@@ -8,4 +8,5 @@ public interface IPlayerMirrorClient
 
     void ApplyUpdate(byte[] data, string commit);
     void DispatchMessage(string subject, byte[] data);
+    void OnSendMessage(Action<string, long, byte[]> handler);
 }

@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using Natify;
+using PubSubLib.Contracts;
 using PubSubLib.Messages;
 
 namespace PubSubLib;
@@ -24,25 +25,29 @@ internal sealed class PubSubNatifySync : IDisposable
 
     private void OnCommand(Data<PubSubCommand> data)
     {
-        var cmd = data.Value;
-        switch (cmd.CmdCase)
+        try
         {
-            case PubSubCommand.CmdOneofCase.AddWatcher:
-                HandleAddWatcher(cmd.AddWatcher);
-                break;
-            case PubSubCommand.CmdOneofCase.RemoveWatcher:
-                HandleRemoveWatcher(cmd.RemoveWatcher);
-                break;
-            case PubSubCommand.CmdOneofCase.MoveWatcher:
-                HandleMoveWatcher(cmd.MoveWatcher);
-                break;
-            case PubSubCommand.CmdOneofCase.PingUnits:
-                HandlePingUnits(cmd.PingUnits);
-                break;
-            case PubSubCommand.CmdOneofCase.PublishEvent:
-                HandlePublishEvent(cmd.PublishEvent);
-                break;
+            var cmd = data.Value;
+            switch (cmd.CmdCase)
+            {
+                case PubSubCommand.CmdOneofCase.AddWatcher:
+                    HandleAddWatcher(cmd.AddWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.RemoveWatcher:
+                    HandleRemoveWatcher(cmd.RemoveWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.MoveWatcher:
+                    HandleMoveWatcher(cmd.MoveWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.PingUnits:
+                    HandlePingUnits(cmd.PingUnits);
+                    break;
+                case PubSubCommand.CmdOneofCase.PublishEvent:
+                    HandlePublishEvent(cmd.PublishEvent);
+                    break;
+            }
         }
+        catch (Exception ex) { PubSubLog.Error(ex, "PubSubNatifySync.OnCommand failed"); }
     }
 
     private void HandleAddWatcher(AddWatcherCmd cmd)

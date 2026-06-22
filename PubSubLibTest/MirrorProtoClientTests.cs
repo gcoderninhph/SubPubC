@@ -509,4 +509,27 @@ public class MirrorProtoClientTests
 
         Assert.False(received);
     }
+
+    [Fact]
+    public void SendMessage_InvokesOnSendHandler()
+    {
+        var mirror = new MirrorSendTestMirrorClient { PlayerId = 42 };
+        (string subject, long playerId, byte[] data)? captured = null;
+        ((IPlayerMirrorClient)mirror).OnSendMessage((s, pid, b) => captured = (s, pid, b));
+
+        mirror.SendMessage("chat", new ChatMsg { Text = "hello from client" });
+
+        Assert.NotNull(captured);
+        Assert.Equal("chat", captured!.Value.subject);
+        Assert.Equal(42L, captured.Value.playerId);
+        var parsed = ChatMsg.Parser.ParseFrom(captured.Value.data);
+        Assert.Equal("hello from client", parsed.Text);
+    }
+
+    [Fact]
+    public void SendMessage_NoHandler_DoesNotThrow()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        mirror.SendMessage("chat", new ChatMsg { Text = "hi" });
+    }
 }

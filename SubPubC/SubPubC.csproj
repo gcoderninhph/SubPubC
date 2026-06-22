@@ -15,4 +15,8 @@
       <PackageReference Include="NATS.Client" Version="1.1.8" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PubSubLib.Contracts\PubSubLib.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

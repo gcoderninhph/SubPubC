@@ -1,4 +1,6 @@
+using Google.Protobuf;
 using MyConnection;
+using PubSubLib.Contracts;
 using PubSubLib.Messages;
 
 namespace PubSubLib.Client;
@@ -6,6 +8,7 @@ namespace PubSubLib.Client;
 internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 {
     private readonly PlayerSpeaksClient _client;
+    private IClient? _clientPtr;
     private ISubscribe? _tcpSub;
     private ISubscribe? _msgSub;
     private ISubscribe? _welcomeSub;
@@ -13,10 +16,21 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
     public PlayerSpeaksClientModule()
     {
         _client = new PlayerSpeaksClient();
+        _client.OnSendToServer = (dataName, playerId, subject, bytes) =>
+        {
+            _clientPtr?.SendOnTcp("PlayerSpeaks.ClientMsg", new ClientMirrorMessage
+            {
+                DataName = dataName,
+                PlayerId = playerId,
+                Subject = subject,
+                Data = ByteString.CopyFrom(bytes)
+            });
+        };
     }
 
     public void SetIClient(IClient client)
     {
+        _clientPtr = client;
         _welcomeSub = client.SubscribeTcp<PlayerSpeaksWelcomeMsg>("PlayerSpeaks.Welcome", OnWelcome);
         _tcpSub = client.SubscribeTcp<PlayerSpeaksEvent>("PlayerSpeaks.Evt", OnEvent);
         _msgSub = client.SubscribeTcp<MirrorMessageEvent>("PlayerSpeaks.Msg", OnMsg);
@@ -24,17 +38,20 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 
     private void OnWelcome(PlayerSpeaksWelcomeMsg msg)
     {
-        _client.SetPlayerId(msg.PlayerId);
+        try { _client.SetPlayerId(msg.PlayerId); }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnWelcome failed"); }
     }
 
     private void OnEvent(PlayerSpeaksEvent evt)
     {
-        _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit);
+        try { _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit); }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnEvent failed"); }
     }
 
     private void OnMsg(MirrorMessageEvent msg)
     {
-        _client.DispatchMessage(msg.DataName, msg.Subject, msg.Data.ToByteArray());
+        try { _client.DispatchMessage(msg.DataName, msg.Subject, msg.Data.ToByteArray()); }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnMsg failed"); }
     }
 
     public IPlayerSpeaksClient Get()

@@ -286,6 +286,41 @@ public class PlayerSpeaksTestAll : IDisposable
         Assert.Equal("hello from server", received!.Text);
     }
 
+    [Fact]
+    public async Task FullStack_SendMessage_ClientToServer()
+    {
+        var playerId = 2L;
+        var signal = new ManualResetEventSlim();
+        ChatMsg? received = null;
+
+        CreateRouter();
+        await CreateServerAsync();
+
+        var serverData = _manager.CreateData<MirrorSendTestMirror>(playerId);
+        serverData.OnMessage<ChatMsg>("chat", msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
+
+        using var handle = await CreateClientAsync("test2", playerId);
+        handle.ClientData.AddData<MirrorSendTestMirrorClient>();
+        var clientData = handle.ClientData.GetData<MirrorSendTestMirrorClient>();
+
+        await Task.Delay(2000);
+
+        Assert.NotNull(clientData);
+        Assert.Equal(playerId, clientData!.PlayerId);
+
+        clientData.SendMessage("chat", new ChatMsg { Text = "hello from client" });
+        await Task.Delay(500);
+        _manager.Tick();
+
+        Assert.True(signal.Wait(10000), "Server did not receive SendMessage");
+        Assert.NotNull(received);
+        Assert.Equal("hello from client", received!.Text);
+    }
+
     internal class Player(string id, string name) : IUser
     {
         public string Name => name;

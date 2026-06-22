@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using PubSubLib;
 using PubSubLib.Messages;
 using PubSubLib.Mirror;
@@ -487,6 +488,79 @@ public class MirrorProtoTests
         var mirror = new MirrorSendTestMirror();
         mirror.SendMessage("chat", new ChatMsg { Text = "hi" });
         MirrorProtoBus.Flush();
+    }
+
+    [Fact]
+    public void OnMessage_ReceivesAndDeserializes()
+    {
+        var mirror = new MirrorSendTestMirror();
+        ChatMsg? received = null;
+        mirror.OnMessage<ChatMsg>("chat", msg => received = msg);
+
+        var chat = new ChatMsg { Text = "hello world" };
+        var actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("chat", chat.ToByteArray());
+
+        Assert.Single(actions);
+        actions[0]();
+        Assert.NotNull(received);
+        Assert.Equal("hello world", received!.Text);
+    }
+
+    [Fact]
+    public void OnMessage_MultipleHandlers_AllNotified()
+    {
+        var mirror = new MirrorSendTestMirror();
+        var received = new System.Collections.Concurrent.ConcurrentBag<string>();
+        mirror.OnMessage<ChatMsg>("chat", msg => received.Add("a:" + msg.Text));
+        mirror.OnMessage<ChatMsg>("chat", msg => received.Add("b:" + msg.Text));
+
+        var chat = new ChatMsg { Text = "hi" };
+        var actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("chat", chat.ToByteArray());
+
+        Assert.Equal(2, actions.Count);
+        foreach (var a in actions) a();
+        Assert.Equal(2, received.Count);
+        Assert.Contains("a:hi", received);
+        Assert.Contains("b:hi", received);
+    }
+
+    [Fact]
+    public void OnMessage_Unsubscribe_StopsReceiving()
+    {
+        var mirror = new MirrorSendTestMirror();
+        var received = new List<string>();
+        var sub = mirror.OnMessage<ChatMsg>("chat", msg => received.Add(msg.Text));
+
+        var chat = new ChatMsg { Text = "first" };
+        var actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("chat", chat.ToByteArray());
+        Assert.Single(actions);
+        actions[0]();
+
+        sub.Dispose();
+
+        actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("chat", new ChatMsg { Text = "second" }.ToByteArray());
+        Assert.Empty(actions);
+        Assert.Single(received);
+        Assert.Equal("first", received[0]);
+    }
+
+    [Fact]
+    public void PrepareMessageDispatch_NoHandler_ReturnsEmpty()
+    {
+        var mirror = new MirrorSendTestMirror();
+        var actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("chat", new ChatMsg { Text = "hi" }.ToByteArray());
+        Assert.Empty(actions);
+    }
+
+    [Fact]
+    public void PrepareMessageDispatch_WrongSubject_ReturnsEmpty()
+    {
+        var mirror = new MirrorSendTestMirror();
+        mirror.OnMessage<ChatMsg>("chat", _ => { });
+
+        var actions = ((IPlayerDataInternal)mirror).PrepareMessageDispatch("other", new ChatMsg { Text = "hi" }.ToByteArray());
+
+        Assert.Empty(actions);
     }
 
 }

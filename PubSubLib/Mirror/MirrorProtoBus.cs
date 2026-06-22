@@ -1,4 +1,5 @@
 using Google.Protobuf;
+using PubSubLib.Contracts;
 using System;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -41,7 +42,7 @@ public static class MirrorProtoBus
         while (_channel.Reader.TryRead(out var action))
         {
             try { action(); }
-            catch { }
+            catch (Exception ex) { PubSubLog.Error(ex, "MirrorProtoBus.Flush action failed"); }
         }
     }
 
@@ -55,12 +56,13 @@ public static class MirrorProtoBus
                 while (reader.TryRead(out var action))
                 {
                     try { action(); }
-                    catch { }
+                    catch (Exception ex) { PubSubLog.Error(ex, "MirrorProtoBus.ProcessLoop action failed"); }
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            PubSubLog.Error(ex, "MirrorProtoBus.ProcessLoop terminated");
         }
     }
 }

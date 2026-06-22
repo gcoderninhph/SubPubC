@@ -14,4 +14,5 @@ public interface IPlayerSpeaksNatifyClient : IDisposable
 
     void OnPlayerSpeaks(Action<PlayerSpeaksEvent> callback);
     void OnMirrorMessage(Action<MirrorMessageEvent> callback);
+    void SendClientMsg(ClientMirrorMessage msg);
 }

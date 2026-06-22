@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using PubSubLib.Contracts;
 
 namespace PubSubLib;
 
@@ -65,15 +66,15 @@ internal sealed class EventChannel : IDisposable
             {
                 _reader.WaitToReadAsync(_cts.Token).AsTask().Wait(1000);
             }
-            catch { }
+            catch (Exception ex) { PubSubLog.Error(ex, "EventChannel WaitToReadAsync failed"); }
 
             while (_reader.TryRead(out var action))
             {
                 try { action(); }
-                catch { }
+                catch (Exception ex) { PubSubLog.Error(ex, "EventChannel action failed"); }
             }
 
-            try { _onIdleCheck(); } catch { }
+            try { _onIdleCheck(); } catch (Exception ex) { PubSubLog.Error(ex, "EventChannel idle check failed"); }
         }
     }
 }

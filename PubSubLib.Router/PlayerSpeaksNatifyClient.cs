@@ -1,4 +1,5 @@
 using Natify;
+using PubSubLib.Contracts;
 using PubSubLib.Messages;
 
 namespace PubSubLib.Router;
@@ -13,6 +14,7 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
 
     private const string EvtTopic = "PlayerSpeaks.Evt";
     private const string MsgTopic = "PlayerSpeaks.Msg";
+    private const string ClientMsgTopic = "PlayerSpeaks.ClientMsg";
     private const string StatusTopic = "PlayerSpeaks.Status";
 
     internal PlayerSpeaksNatifyClient(NatifyServer server, string regionId)
@@ -25,12 +27,14 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
 
     private void OnEvent((string regionId, Data<PlayerSpeaksEvent> data) args)
     {
-        _onPlayerSpeaks?.Invoke(args.data.Value);
+        try { _onPlayerSpeaks?.Invoke(args.data.Value); }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnPlayerSpeaks callback failed"); }
     }
 
     private void OnMsg((string regionId, Data<MirrorMessageEvent> data) args)
     {
-        _onMirrorMessage?.Invoke(args.data.Value);
+        try { _onMirrorMessage?.Invoke(args.data.Value); }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnMirrorMessage callback failed"); }
     }
 
     public void SendOnlineStatus(PlayerOnlineStatusMsg msg)
@@ -46,6 +50,12 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
     public void OnMirrorMessage(Action<MirrorMessageEvent> callback)
     {
         _onMirrorMessage = callback;
+    }
+
+    public void SendClientMsg(ClientMirrorMessage msg)
+    {
+        try { _server.Publish(ClientMsgTopic, _regionId, msg); }
+        catch (Exception ex) { PubSubLog.Error(ex, "SendClientMsg publish failed"); }
     }
 
     public void Dispose()

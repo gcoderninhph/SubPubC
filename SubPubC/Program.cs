@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PubSubLib.Contracts;
 using Serilog;
 using SubPubC;
 
@@ -6,6 +7,9 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
     .CreateLogger();
+
+PubSubLog.OnError += entry =>
+    Log.Error(entry.Exception, "[{Source}] {Message}", entry.Source, entry.Message);
 
 var natsUrl = Environment.GetEnvironmentVariable("NATS_URL") ?? "nats://localhost:4222";
 
