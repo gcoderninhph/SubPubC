@@ -29,6 +29,7 @@ public class MirrorProtoTests
 
         mirror.WatcherId = 42;
         mirror.Commit("test_reason");
+        MirrorProtoBus.Flush();
 
         Assert.NotNull(received);
         Assert.Equal("test_reason", received!.Value.commit);
@@ -45,6 +46,7 @@ public class MirrorProtoTests
 
         mirror.WatcherId = 7;
         mirror.Commit("multi");
+        MirrorProtoBus.Flush();
 
         Assert.Equal(2, count);
     }
@@ -57,6 +59,7 @@ public class MirrorProtoTests
         mirror.OnChange((_, _) => called = true);
 
         mirror.Commit("no_change");
+        MirrorProtoBus.Flush();
 
         Assert.True(called);
     }
@@ -78,6 +81,7 @@ public class MirrorProtoTests
 
         mirror.WatcherId = 100;
         mirror.Commit("deser");
+        MirrorProtoBus.Flush();
 
         Assert.NotNull(data);
         var parsed = RemoveWatcherCmd.Parser.ParseFrom(data);

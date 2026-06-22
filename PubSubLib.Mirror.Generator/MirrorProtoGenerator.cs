@@ -144,10 +144,14 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
 
         sb.AppendLine("    public void Commit(string commit)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var proto = GetMirrorProto();");
+        sb.AppendLine($"        var __proto = new {info.ProtoTypeFullName}();");
+        sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(__proto,");
+        sb.AppendLine("            __bytes => _onChange?.Invoke(__bytes, commit),");
+        sb.AppendLine("            __p =>");
+        sb.AppendLine("            {");
         foreach (var f in info.Fields)
-            sb.AppendLine($"        proto.{f.PropertyName} = {f.FieldName};");
-        sb.AppendLine("        Notify(proto.ToByteArray(), commit);");
+            sb.AppendLine($"                __p.{f.PropertyName} = {f.FieldName};");
+        sb.AppendLine("            });");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    public void SyncFromProto()");
