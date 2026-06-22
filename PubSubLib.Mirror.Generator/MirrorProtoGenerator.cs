@@ -124,11 +124,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine("        _onChange += handler;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    private void Notify(byte[] bytes, string commit)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        _onChange?.Invoke(bytes, commit);");
-        sb.AppendLine("    }");
-        sb.AppendLine();
+
 
         foreach (var f in info.Fields)
         {
@@ -144,8 +140,8 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
 
         sb.AppendLine("    public void Commit(string commit)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        var __proto = new {info.ProtoTypeFullName}();");
-        sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(__proto,");
+        sb.AppendLine("        var proto = GetMirrorProto();");
+        sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(proto,");
         sb.AppendLine("            __bytes => _onChange?.Invoke(__bytes, commit),");
         sb.AppendLine("            __p =>");
         sb.AppendLine("            {");
@@ -154,12 +150,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine("            });");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    public void SyncFromProto()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var proto = GetMirrorProto();");
-        foreach (var f in info.Fields)
-            sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
-        sb.AppendLine("    }");
+
         sb.AppendLine("}");
         if (!string.IsNullOrEmpty(info.Namespace))
             sb.AppendLine("}");
