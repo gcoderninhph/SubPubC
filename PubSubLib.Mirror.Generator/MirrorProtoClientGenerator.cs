@@ -109,7 +109,6 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
             sb.AppendLine("    {");
             sb.AppendLine($"        get => {f.FieldName};");
-            sb.AppendLine($"        set => {f.FieldName} = value;");
             sb.AppendLine("    }");
             sb.AppendLine();
         }

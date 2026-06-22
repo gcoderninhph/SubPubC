@@ -27,7 +27,9 @@ public class MirrorProtoClientTests
     [Fact]
     public void Getter_ReturnsStoredValue()
     {
-        var mirror = new RemoveWatcherMirrorClient { WatcherId = 99 };
+        var src = new RemoveWatcherCmd { WatcherId = 99 };
+        var mirror = new RemoveWatcherMirrorClient();
+        mirror.ApplyUpdate(src.ToByteArray(), "test");
         Assert.Equal(99L, mirror.WatcherId);
     }
 
