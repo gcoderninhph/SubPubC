@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using MyConnection;
+using PubSubLib;
 using PubSubLib.Messages;
 
 namespace PubSubLib.Client;

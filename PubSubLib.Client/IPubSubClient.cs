@@ -1,3 +1,5 @@
+using PubSubLib;
+
 namespace PubSubLib.Client;
 
 public interface IPubSubClient : IDisposable

@@ -131,6 +131,33 @@ message StructTestMsg {
     int32 version = 3;
 }
 
+// ===== Mirror Vector3 Test =====
+
+message Vector3TestMsg {
+    repeated float position_vector3 = 1;
+    repeated float waypoints_vector3s = 2;
+    int32 version = 3;
+}
+
+// ===== Mirror Vector3 Struct Test =====
+
+message Vector3StructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated float struct_x_player_x_position_vector3s_value = 3;
+    repeated int32 struct_x_player_x_position_vector3s_count = 4;
+    int32 version = 5;
+}
+
+// ===== Mirror Vector3 Single Struct Test =====
+
+message Vector3SingleStructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated float struct_x_player_x_position_vector3 = 3;
+    int32 version = 4;
+}
+
 // Topic: PlayerSpeaks.Welcome (Router -> Client via MyConnection TCP)
 
 message PlayerSpeaksWelcomeMsg {

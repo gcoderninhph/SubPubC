@@ -92,10 +92,20 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             }
         }
 
+        var (vectorGroups, vectorGroupIndex) = DetectVectorGroups(fields);
+        for (int i = 0; i < fields.Count; i++)
+        {
+            if (vectorGroupIndex[i] >= 0)
+            {
+                var f = fields[i];
+                fields[i] = new FieldMapping(f.FieldName, f.PropertyName, f.TypeName, f.IsRepeated, f.ElementTypeName, f.IsReferenceType, f.StructGroupIndex, vectorGroupIndex[i]);
+            }
+        }
+
         var fullProtoName = protoType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .TrimStartGlobalPrefix();
 
-        return new MirrorClassInfo(ns, classSymbol.Name, fullProtoName, dataName, fields.ToArray(), structGroups);
+        return new MirrorClassInfo(ns, classSymbol.Name, fullProtoName, dataName, fields.ToArray(), structGroups, vectorGroups);
     }
 
     private static string ToFieldName(string propertyName)
@@ -170,7 +180,92 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 index[m.index] = groups.Count;
             }
 
-            groups.Add(new StructGroup(structName, fieldName, protoPropNames, fieldPropNames, elementTypes, isRefTypes));
+            var vec3Fields = new List<StructVector3Field>();
+            var vecUsedIndices = new HashSet<int>();
+            for (int vi = 0; vi < members.Count; vi++)
+            {
+                if (vecUsedIndices.Contains(vi)) continue;
+                var vfn = fieldPropNames[vi];
+                if (!vfn.EndsWith("Vector3SValue") || vfn.Length <= 13) continue;
+                if (elementTypes[vi] != "float") continue;
+                var prefix = vfn.Substring(0, vfn.Length - 13);
+                for (int ci = 0; ci < members.Count; ci++)
+                {
+                    if (ci == vi || vecUsedIndices.Contains(ci)) continue;
+                    var cfn = fieldPropNames[ci];
+                    if (!cfn.EndsWith("Vector3SCount") || cfn.Length <= 13) continue;
+                    if (elementTypes[ci] != "int") continue;
+                    if (cfn.Substring(0, cfn.Length - 13) == prefix)
+                    {
+                        vec3Fields.Add(new StructVector3Field(prefix, protoPropNames[vi], protoPropNames[ci]));
+                        vecUsedIndices.Add(vi);
+                        vecUsedIndices.Add(ci);
+                        break;
+                    }
+                }
+            }
+
+            for (int si = 0; si < members.Count; si++)
+            {
+                if (vecUsedIndices.Contains(si)) continue;
+                var sfn = fieldPropNames[si];
+                if (!sfn.EndsWith("Vector3") || sfn.Length <= 7) continue;
+                if (sfn.EndsWith("Vector3SValue") || sfn.EndsWith("Vector3SCount")) continue;
+                if (elementTypes[si] != "float") continue;
+                var prefix = sfn.Substring(0, sfn.Length - 7);
+                vec3Fields.Add(new StructVector3Field(prefix, protoPropNames[si], "", isArray: false));
+                vecUsedIndices.Add(si);
+            }
+
+            var filteredProtoPropNames = new List<string>();
+            var filteredFieldPropNames = new List<string>();
+            var filteredElementTypes = new List<string>();
+            var filteredIsRefTypes = new List<bool>();
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (vecUsedIndices.Contains(i)) continue;
+                filteredProtoPropNames.Add(protoPropNames[i]);
+                filteredFieldPropNames.Add(fieldPropNames[i]);
+                filteredElementTypes.Add(elementTypes[i]);
+                filteredIsRefTypes.Add(isRefTypes[i]);
+            }
+
+            groups.Add(new StructGroup(structName, fieldName,
+                filteredProtoPropNames.ToArray(), filteredFieldPropNames.ToArray(),
+                filteredElementTypes.ToArray(), filteredIsRefTypes.ToArray(),
+                vec3Fields.ToArray()));
+        }
+
+        return (groups.ToArray(), index);
+    }
+
+    internal static (VectorGroup[] groups, int[] vectorGroupIndex) DetectVectorGroups(List<FieldMapping> fields)
+    {
+        var groups = new List<VectorGroup>();
+        var index = new int[fields.Count];
+        for (int i = 0; i < fields.Count; i++) index[i] = -1;
+
+        for (int i = 0; i < fields.Count; i++)
+        {
+            var f = fields[i];
+            if (!f.IsRepeated) continue;
+            if (f.ElementTypeName != "float") continue;
+            if (f.StructGroupIndex >= 0) continue;
+
+            if (f.PropertyName.EndsWith("Vector3S") && f.PropertyName.Length > 8)
+            {
+                var propName = f.PropertyName.Substring(0, f.PropertyName.Length - 8);
+                var fieldName = ToFieldName(propName);
+                groups.Add(new VectorGroup(fieldName, propName, f.PropertyName, true));
+                index[i] = groups.Count - 1;
+            }
+            else if (f.PropertyName.EndsWith("Vector3") && f.PropertyName.Length > 7)
+            {
+                var propName = f.PropertyName.Substring(0, f.PropertyName.Length - 7);
+                var fieldName = ToFieldName(propName);
+                groups.Add(new VectorGroup(fieldName, propName, f.PropertyName, false));
+                index[i] = groups.Count - 1;
+            }
         }
 
         return (groups.ToArray(), index);
@@ -203,11 +298,22 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             {
                 sb.AppendLine($"        public {sg.ElementTypes[i]} {sg.FieldPropNames[i]} {{ get; }}");
             }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
+            }
             sb.AppendLine();
             var ctorArgs = new List<string>();
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
             {
                 ctorArgs.Add($"{sg.ElementTypes[i]} {char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                ctorArgs.Add($"{v3Type} {argName}");
             }
             sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
             sb.AppendLine("        {");
@@ -215,6 +321,11 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             {
                 var argName = $"{char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}";
                 sb.AppendLine($"            {sg.FieldPropNames[i]} = {argName};");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                sb.AppendLine($"            {vf.FieldName} = {argName};");
             }
             sb.AppendLine("        }");
             sb.AppendLine("    }");
@@ -249,6 +360,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         foreach (var f in info.Fields)
         {
             if (f.StructGroupIndex >= 0) continue;
+            if (f.VectorGroupIndex >= 0) continue;
 
             if (f.IsRepeated)
             {
@@ -285,9 +397,35 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
-        var hasAnyField = info.Fields.Any(f => f.StructGroupIndex < 0);
+        foreach (var vg in info.VectorGroups)
+        {
+            if (vg.IsList)
+            {
+                var listType = "global::PubSubLib.Mirror.MirrorRepeatedList<global::PubSubLib.Vector3>";
+                sb.AppendLine($"    private readonly {listType} {vg.FieldName} = new();");
+                sb.AppendLine();
+                sb.AppendLine($"    public {listType} {vg.PropertyName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        get => {vg.FieldName};");
+                sb.AppendLine("    }");
+            }
+            else
+            {
+                sb.AppendLine($"    private global::PubSubLib.Vector3 {vg.FieldName};");
+                sb.AppendLine();
+                sb.AppendLine($"    public global::PubSubLib.Vector3 {vg.PropertyName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        get => {vg.FieldName};");
+                sb.AppendLine($"        set => {vg.FieldName} = value;");
+                sb.AppendLine("    }");
+            }
+            sb.AppendLine();
+        }
+
+        var hasAnyField = info.Fields.Any(f => f.StructGroupIndex < 0 && f.VectorGroupIndex < 0);
         var hasAnyStructGroup = info.StructGroups.Length > 0;
-        if (hasAnyField || hasAnyStructGroup)
+        var hasAnyVectorGroup = info.VectorGroups.Length > 0;
+        if (hasAnyField || hasAnyStructGroup || hasAnyVectorGroup)
         {
             sb.AppendLine("    public void Commit(string commit)");
             sb.AppendLine("    {");
@@ -297,9 +435,18 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 sb.AppendLine($"        {sg.StructName}[]? ___arr_{sg.FieldName} = {sg.FieldName}.IsDirty ? {sg.FieldName}.ToArray() : null;");
                 sb.AppendLine($"        {sg.FieldName}.ClearDirty();");
             }
+            foreach (var vg in info.VectorGroups)
+            {
+                if (vg.IsList)
+                {
+                    sb.AppendLine($"        global::PubSubLib.Vector3[]? ___arr_{vg.FieldName} = {vg.FieldName}.IsDirty ? {vg.FieldName}.ToArray() : null;");
+                    sb.AppendLine($"        {vg.FieldName}.ClearDirty();");
+                }
+            }
             foreach (var f in info.Fields)
             {
                 if (f.StructGroupIndex >= 0) continue;
+                if (f.VectorGroupIndex >= 0) continue;
                 if (f.IsRepeated)
                 {
                     sb.AppendLine($"        {f.ElementTypeName}[]? ___arr_{f.FieldName} = {f.FieldName}.IsDirty ? {f.FieldName}.ToArray() : null;");
@@ -318,18 +465,69 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 {
                     sb.AppendLine($"                    __p.{sg.ProtoPropNames[i]}.Clear();");
                 }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    sb.AppendLine($"                    __p.{vf.ValueProtoName}.Clear();");
+                    if (vf.IsArray)
+                        sb.AppendLine($"                    __p.{vf.CountProtoName}.Clear();");
+                }
                 sb.AppendLine($"                    foreach (var __item in ___arr_{sg.FieldName})");
                 sb.AppendLine("                    {");
                 for (int i = 0; i < sg.ProtoPropNames.Length; i++)
                 {
                     sb.AppendLine($"                        __p.{sg.ProtoPropNames[i]}.Add(__item.{sg.FieldPropNames[i]});");
                 }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    if (vf.IsArray)
+                    {
+                        sb.AppendLine($"                        var ___v3s_{vf.FieldName} = __item.{vf.FieldName};");
+                        sb.AppendLine($"                        __p.{vf.CountProtoName}.Add(___v3s_{vf.FieldName}?.Length ?? 0);");
+                        sb.AppendLine($"                        if (___v3s_{vf.FieldName} is not null)");
+                        sb.AppendLine($"                            foreach (var __v in ___v3s_{vf.FieldName})");
+                        sb.AppendLine("                            {");
+                        sb.AppendLine($"                                __p.{vf.ValueProtoName}.Add(__v.x);");
+                        sb.AppendLine($"                                __p.{vf.ValueProtoName}.Add(__v.y);");
+                        sb.AppendLine($"                                __p.{vf.ValueProtoName}.Add(__v.z);");
+                        sb.AppendLine("                            }");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"                        __p.{vf.ValueProtoName}.Add(__item.{vf.FieldName}.x);");
+                        sb.AppendLine($"                        __p.{vf.ValueProtoName}.Add(__item.{vf.FieldName}.y);");
+                        sb.AppendLine($"                        __p.{vf.ValueProtoName}.Add(__item.{vf.FieldName}.z);");
+                    }
+                }
                 sb.AppendLine("                    }");
                 sb.AppendLine("                }");
+            }
+            foreach (var vg in info.VectorGroups)
+            {
+                if (vg.IsList)
+                {
+                    sb.AppendLine($"                if (___arr_{vg.FieldName} is not null)");
+                    sb.AppendLine("                {");
+                    sb.AppendLine($"                    __p.{vg.ProtoPropName}.Clear();");
+                    sb.AppendLine($"                    foreach (var __item in ___arr_{vg.FieldName})");
+                    sb.AppendLine("                    {");
+                    sb.AppendLine($"                        __p.{vg.ProtoPropName}.Add(__item.x);");
+                    sb.AppendLine($"                        __p.{vg.ProtoPropName}.Add(__item.y);");
+                    sb.AppendLine($"                        __p.{vg.ProtoPropName}.Add(__item.z);");
+                    sb.AppendLine("                    }");
+                    sb.AppendLine("                }");
+                }
+                else
+                {
+                    sb.AppendLine($"                __p.{vg.ProtoPropName}.Clear();");
+                    sb.AppendLine($"                __p.{vg.ProtoPropName}.Add({vg.FieldName}.x);");
+                    sb.AppendLine($"                __p.{vg.ProtoPropName}.Add({vg.FieldName}.y);");
+                    sb.AppendLine($"                __p.{vg.ProtoPropName}.Add({vg.FieldName}.z);");
+                }
             }
             foreach (var f in info.Fields)
             {
                 if (f.StructGroupIndex >= 0) continue;
+                if (f.VectorGroupIndex >= 0) continue;
                 if (f.IsRepeated)
                 {
                     sb.AppendLine($"                if (___arr_{f.FieldName} is not null)");
@@ -380,7 +578,8 @@ internal readonly struct FieldMapping
     public readonly string ElementTypeName;
     public readonly bool IsReferenceType;
     public readonly int StructGroupIndex;
-    public FieldMapping(string fieldName, string propertyName, string typeName, bool isRepeated, string elementTypeName, bool isReferenceType, int structGroupIndex = -1)
+    public readonly int VectorGroupIndex;
+    public FieldMapping(string fieldName, string propertyName, string typeName, bool isRepeated, string elementTypeName, bool isReferenceType, int structGroupIndex = -1, int vectorGroupIndex = -1)
     {
         FieldName = fieldName;
         PropertyName = propertyName;
@@ -389,6 +588,22 @@ internal readonly struct FieldMapping
         ElementTypeName = elementTypeName;
         IsReferenceType = isReferenceType;
         StructGroupIndex = structGroupIndex;
+        VectorGroupIndex = vectorGroupIndex;
+    }
+}
+
+internal sealed class StructVector3Field
+{
+    public readonly string FieldName;
+    public readonly string ValueProtoName;
+    public readonly string CountProtoName;
+    public readonly bool IsArray;
+    public StructVector3Field(string fieldName, string valueProtoName, string countProtoName, bool isArray = true)
+    {
+        FieldName = fieldName;
+        ValueProtoName = valueProtoName;
+        CountProtoName = countProtoName;
+        IsArray = isArray;
     }
 }
 
@@ -400,7 +615,8 @@ internal sealed class StructGroup
     public readonly string[] FieldPropNames;
     public readonly string[] ElementTypes;
     public readonly bool[] IsRefTypes;
-    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes)
+    public readonly StructVector3Field[] Vector3Fields;
+    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes, StructVector3Field[] vector3Fields)
     {
         StructName = structName;
         FieldName = fieldName;
@@ -408,6 +624,22 @@ internal sealed class StructGroup
         FieldPropNames = fieldPropNames;
         ElementTypes = elementTypes;
         IsRefTypes = isRefTypes;
+        Vector3Fields = vector3Fields;
+    }
+}
+
+internal sealed class VectorGroup
+{
+    public readonly string FieldName;
+    public readonly string PropertyName;
+    public readonly string ProtoPropName;
+    public readonly bool IsList;
+    public VectorGroup(string fieldName, string propertyName, string protoPropName, bool isList)
+    {
+        FieldName = fieldName;
+        PropertyName = propertyName;
+        ProtoPropName = protoPropName;
+        IsList = isList;
     }
 }
 
@@ -419,7 +651,8 @@ internal readonly struct MirrorClassInfo
     public readonly string DataName;
     public readonly FieldMapping[] Fields;
     public readonly StructGroup[] StructGroups;
-    public MirrorClassInfo(string ns, string className, string protoTypeFullName, string dataName, FieldMapping[] fields, StructGroup[] structGroups)
+    public readonly VectorGroup[] VectorGroups;
+    public MirrorClassInfo(string ns, string className, string protoTypeFullName, string dataName, FieldMapping[] fields, StructGroup[] structGroups, VectorGroup[] vectorGroups)
     {
         Namespace = ns;
         ClassName = className;
@@ -427,5 +660,6 @@ internal readonly struct MirrorClassInfo
         DataName = dataName;
         Fields = fields;
         StructGroups = structGroups;
+        VectorGroups = vectorGroups;
     }
 }

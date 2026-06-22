@@ -219,13 +219,13 @@ public class MirrorProtoTests
     }
 
     [Fact]
-    public void StructGroup_NoChange_SkipsRepeated()
+    public void Vector3Struct_NoChange_SkipsRepeated()
     {
-        var mirror = new StructTestMirror();
+        var mirror = new Vector3StructTestMirror();
         byte[]? data = null;
         mirror.OnChange((bytes, _) => data = bytes);
 
-        mirror.Players.Add(new StructTestMirror.Player(42, "ninh"));
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh", new Vector3[0]));
         mirror.Commit("first");
         MirrorProtoBus.Flush();
 
@@ -233,10 +233,214 @@ public class MirrorProtoTests
         mirror.Commit("second");
         MirrorProtoBus.Flush();
 
-        var parsed = StructTestMsg.Parser.ParseFrom(data!);
-        Assert.Equal(new long[] { 42 }, parsed.StructXPlayerXId);
+        var parsed = Vector3StructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
         Assert.Equal(99, parsed.Version);
     }
+
+    [Fact]
+    public void Vector3SingleStruct_SetPosition_Commit_SendsThreeFloats()
+    {
+        var mirror = new Vector3SingleStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new Vector3SingleStructTestMirror.Player(1, "ninh",
+            new Vector3 { x = 1, y = 2, z = 3 }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3SingleStructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh" }, parsed.StructXPlayerXName);
+        Assert.Equal(new float[] { 1, 2, 3 }, parsed.StructXPlayerXPositionVector3);
+    }
+
+    [Fact]
+    public void Vector3SingleStruct_MultiplePlayers_CommitsCorrectFloats()
+    {
+        var mirror = new Vector3SingleStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new Vector3SingleStructTestMirror.Player(1, "ninh",
+            new Vector3 { x = 1, y = 2, z = 3 }));
+        mirror.Players.Add(new Vector3SingleStructTestMirror.Player(2, "yen",
+            new Vector3 { x = 4, y = 5, z = 6 }));
+        mirror.Commit("multi");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3SingleStructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 1, 2 }, parsed.StructXPlayerXId);
+        Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6 }, parsed.StructXPlayerXPositionVector3);
+    }
+
+    [Fact]
+    public void Vector3SingleStruct_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new Vector3SingleStructTestMirror();
+
+        var list = mirror.Players;
+        Assert.False(list.IsDirty);
+
+        mirror.Players.Add(new Vector3SingleStructTestMirror.Player(1, "ninh",
+            new Vector3 { x = 1, y = 2, z = 3 }));
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
+
+    [Fact]
+    public void Vector3_Set_Position_Commit_SendsData()
+    {
+        var mirror = new Vector3TestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Position = new Vector3 { x = 1.5f, y = 2.5f, z = 3.5f };
+        mirror.Commit("vec");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3TestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new float[] { 1.5f, 2.5f, 3.5f }, parsed.PositionVector3);
+    }
+
+    [Fact]
+    public void Vector3List_AddItems_Commit_SendsData()
+    {
+        var mirror = new Vector3TestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Waypoints.Add(new Vector3 { x = 1, y = 2, z = 3 });
+        mirror.Waypoints.Add(new Vector3 { x = 4, y = 5, z = 6 });
+        mirror.Commit("list");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3TestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6 }, parsed.WaypointsVector3S);
+    }
+
+    [Fact]
+    public void Vector3List_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new Vector3TestMirror();
+
+        var list = mirror.Waypoints;
+        Assert.False(list.IsDirty);
+
+        mirror.Waypoints.Add(new Vector3 { x = 1, y = 2, z = 3 });
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
+
+    [Fact]
+    public void Vector3List_NoChange_SkipsRepeated()
+    {
+        var mirror = new Vector3TestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Waypoints.Add(new Vector3 { x = 1, y = 2, z = 3 });
+        mirror.Commit("first");
+        MirrorProtoBus.Flush();
+
+        mirror.Version = 99;
+        mirror.Commit("second");
+        MirrorProtoBus.Flush();
+
+        var parsed = Vector3TestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new float[] { 1, 2, 3 }, parsed.WaypointsVector3S);
+        Assert.Equal(99, parsed.Version);
+    }
+
+    [Fact]
+    public void Vector3Struct_SetPosition_Commit_SendsValueAndCount()
+    {
+        var mirror = new Vector3StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 }, new Vector3 { x = 4, y = 5, z = 6 } }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3StructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh" }, parsed.StructXPlayerXName);
+        Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6 }, parsed.StructXPlayerXPositionVector3SValue);
+        Assert.Equal(new int[] { 2 }, parsed.StructXPlayerXPositionVector3SCount);
+    }
+
+    [Fact]
+    public void Vector3Struct_MultiplePlayersWithDifferentCounts()
+    {
+        var mirror = new Vector3StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Players.Add(new Vector3StructTestMirror.Player(2, "yen",
+            new Vector3[] { new Vector3 { x = 4, y = 5, z = 6 }, new Vector3 { x = 7, y = 8, z = 9 } }));
+        mirror.Players.Add(new Vector3StructTestMirror.Player(3, "bao",
+            new Vector3[] { new Vector3 { x = 10, y = 11, z = 12 }, new Vector3 { x = 13, y = 14, z = 15 }, new Vector3 { x = 16, y = 17, z = 18 } }));
+        mirror.Commit("multi");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3StructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1, 2, 3 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh", "yen", "bao" }, parsed.StructXPlayerXName);
+        Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }, parsed.StructXPlayerXPositionVector3SValue);
+        Assert.Equal(new int[] { 1, 2, 3 }, parsed.StructXPlayerXPositionVector3SCount);
+    }
+
+    [Fact]
+    public void Vector3Struct_EmptyPositionArray_CommitsCountZero()
+    {
+        var mirror = new Vector3StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh", new Vector3[0]));
+        mirror.Commit("empty");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3StructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Equal(new int[] { 0 }, parsed.StructXPlayerXPositionVector3SCount);
+        Assert.Empty(parsed.StructXPlayerXPositionVector3SValue);
+    }
+
+    [Fact]
+    public void Vector3Struct_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new Vector3StructTestMirror();
+
+        var list = mirror.Players;
+        Assert.False(list.IsDirty);
+
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh", new Vector3[0]));
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
+
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
@@ -251,5 +455,20 @@ public partial class BatchEnterMirror
 
 [MirrorProto(typeof(StructTestMsg))]
 public partial class StructTestMirror
+{
+}
+
+[MirrorProto(typeof(Vector3TestMsg))]
+public partial class Vector3TestMirror
+{
+}
+
+[MirrorProto(typeof(Vector3StructTestMsg))]
+public partial class Vector3StructTestMirror
+{
+}
+
+[MirrorProto(typeof(Vector3SingleStructTestMsg))]
+public partial class Vector3SingleStructTestMirror
 {
 }

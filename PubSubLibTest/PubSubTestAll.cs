@@ -223,7 +223,7 @@ public class PubSubTestAll : IDisposable
         }
 
         // Stage 3: move watcher to unit2's position → SyncEnter unit2 + SyncLeave unit1
-        _pubSubClientModule.Get().MoveWatcher(new PubSubLib.Client.Vector2 { x = 500, y = 500 }, 100);
+        _pubSubClientModule.Get().MoveWatcher(new Vector2 { x = 500, y = 500 }, 100);
 
         Assert.True(unit2Entered.Wait(15000), "Stage 3 failed: unit2 did not enter after MoveWatcher");
         Assert.True(unit1Left.Wait(15000), "Stage 3 failed: unit1 did not leave after MoveWatcher");

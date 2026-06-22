@@ -1,4 +1,4 @@
-﻿namespace PubSubLib.Client;
+namespace PubSubLib;
 
 public struct Vector2
 {
