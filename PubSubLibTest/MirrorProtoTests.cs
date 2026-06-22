@@ -165,6 +165,78 @@ public class MirrorProtoTests
         MirrorProtoBus.Flush();
         Assert.False(list.IsDirty);
     }
+
+    [Fact]
+    public void StructGroup_AddItem_Commit_SendsData()
+    {
+        var mirror = new StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new StructTestMirror.Player(1, "ninh"));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = StructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh" }, parsed.StructXPlayerXName);
+    }
+
+    [Fact]
+    public void StructGroup_MultipleItems_Commit()
+    {
+        var mirror = new StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new StructTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new StructTestMirror.Player(2, "yen"));
+        mirror.Players.Add(new StructTestMirror.Player(3, "bao"));
+        mirror.Commit("multi");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = StructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1, 2, 3 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh", "yen", "bao" }, parsed.StructXPlayerXName);
+    }
+
+    [Fact]
+    public void StructGroup_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new StructTestMirror();
+
+        var list = mirror.Players;
+        Assert.False(list.IsDirty);
+
+        mirror.Players.Add(new StructTestMirror.Player(1, "ninh"));
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
+
+    [Fact]
+    public void StructGroup_NoChange_SkipsRepeated()
+    {
+        var mirror = new StructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new StructTestMirror.Player(42, "ninh"));
+        mirror.Commit("first");
+        MirrorProtoBus.Flush();
+
+        mirror.Version = 99;
+        mirror.Commit("second");
+        MirrorProtoBus.Flush();
+
+        var parsed = StructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 42 }, parsed.StructXPlayerXId);
+        Assert.Equal(99, parsed.Version);
+    }
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
@@ -174,5 +246,10 @@ public partial class CustomDataNameMirror
 
 [MirrorProto(typeof(BatchEnterMsg))]
 public partial class BatchEnterMirror
+{
+}
+
+[MirrorProto(typeof(StructTestMsg))]
+public partial class StructTestMirror
 {
 }

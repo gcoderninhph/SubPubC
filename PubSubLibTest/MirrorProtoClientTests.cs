@@ -18,6 +18,13 @@ public partial class BatchEnterMirrorClient
     partial void OnCommit(string commit) => LastCommit = commit;
 }
 
+[MirrorProtoClient(typeof(StructTestMsg))]
+public partial class StructTestMirrorClient
+{
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
+}
+
 public class MirrorProtoClientTests
 {
     [Fact]
@@ -114,5 +121,54 @@ public class MirrorProtoClientTests
 
         var list = ((System.Collections.Generic.IReadOnlyList<long>)mirror.WatcherIds);
         Assert.Equal(new long[] { 9, 8 }, list);
+    }
+
+    [Fact]
+    public void StructGroup_ApplyUpdate_Deserializes()
+    {
+        var src = new StructTestMsg { Version = 5 };
+        src.StructXPlayerXId.Add(10);
+        src.StructXPlayerXName.Add("alpha");
+        src.StructXPlayerXId.Add(20);
+        src.StructXPlayerXName.Add("beta");
+        var bytes = src.ToByteArray();
+
+        var mirror = new StructTestMirrorClient();
+        mirror.ApplyUpdate(bytes, "init");
+
+        Assert.Equal(5, mirror.Version);
+        var list = ((System.Collections.Generic.IReadOnlyList<StructTestMirrorClient.Player>)mirror.Players);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(10L, list[0].Id);
+        Assert.Equal("alpha", list[0].Name);
+        Assert.Equal(20L, list[1].Id);
+        Assert.Equal("beta", list[1].Name);
+    }
+
+    [Fact]
+    public void StructGroup_SecondApplyUpdate_ReplacesList()
+    {
+        var src1 = new StructTestMsg();
+        src1.StructXPlayerXId.Add(1);
+        src1.StructXPlayerXName.Add("one");
+        var bytes1 = src1.ToByteArray();
+
+        var src2 = new StructTestMsg();
+        src2.StructXPlayerXId.Add(9);
+        src2.StructXPlayerXName.Add("nine");
+        src2.StructXPlayerXId.Add(8);
+        src2.StructXPlayerXName.Add("eight");
+        var bytes2 = src2.ToByteArray();
+
+        var mirror = new StructTestMirrorClient();
+        mirror.ApplyUpdate(bytes1, "first");
+        mirror.ApplyUpdate(bytes2, "second");
+
+        var list = ((System.Collections.Generic.IReadOnlyList<StructTestMirrorClient.Player>)mirror.Players);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(9L, list[0].Id);
+        Assert.Equal("nine", list[0].Name);
+        Assert.Equal(8L, list[1].Id);
+        Assert.Equal("eight", list[1].Name);
     }
 }

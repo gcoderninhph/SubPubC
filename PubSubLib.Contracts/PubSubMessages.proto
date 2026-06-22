@@ -123,6 +123,14 @@ message PlayerSpeaksEvent {
     string commit = 4;
 }
 
+// ===== Mirror Struct Test =====
+
+message StructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    int32 version = 3;
+}
+
 // Topic: PlayerSpeaks.Welcome (Router -> Client via MyConnection TCP)
 
 message PlayerSpeaksWelcomeMsg {
