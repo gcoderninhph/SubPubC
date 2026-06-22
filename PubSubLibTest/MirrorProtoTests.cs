@@ -113,9 +113,66 @@ public class MirrorProtoTests
         var mirror = new CustomDataNameMirror();
         Assert.Equal("MyCustomName", mirror.DataName);
     }
+
+    [Fact]
+    public void Repeated_AddItems_Commit_SendsData()
+    {
+        var mirror = new BatchEnterMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.WatcherIds.Add(1);
+        mirror.WatcherIds.Add(2);
+        mirror.WatcherIds.Add(3);
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = BatchEnterMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1, 2, 3 }, parsed.WatcherIds);
+    }
+
+    [Fact]
+    public void Repeated_NoChange_SkipsRepeatedCopy()
+    {
+        var mirror = new BatchEnterMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.WatcherIds.Add(42);
+        mirror.Commit("first");
+        MirrorProtoBus.Flush();
+
+        mirror.Commit("second");
+        MirrorProtoBus.Flush();
+
+        var parsed = BatchEnterMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 42 }, parsed.WatcherIds);
+    }
+
+    [Fact]
+    public void Repeated_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new BatchEnterMirror();
+
+        var list = mirror.WatcherIds;
+        Assert.False(list.IsDirty);
+
+        mirror.WatcherIds.Add(1);
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
 public partial class CustomDataNameMirror
+{
+}
+
+[MirrorProto(typeof(BatchEnterMsg))]
+public partial class BatchEnterMirror
 {
 }

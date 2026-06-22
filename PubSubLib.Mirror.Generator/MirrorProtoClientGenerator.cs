@@ -61,7 +61,19 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             var typeName = propSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .TrimStartGlobalPrefix();
 
-            fields.Add(new FieldMapping(fieldName, propName, typeName));
+            var isRepeated = false;
+            var elementTypeName = typeName;
+            if (propSymbol.Type is INamedTypeSymbol namedType && namedType.IsGenericType
+                && namedType.MetadataName == "RepeatedField`1"
+                && namedType.ContainingNamespace?.ToDisplayString() == "Google.Protobuf.Collections")
+            {
+                isRepeated = true;
+                elementTypeName = namedType.TypeArguments[0]
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .TrimStartGlobalPrefix();
+            }
+
+            fields.Add(new FieldMapping(fieldName, propName, typeName, isRepeated, elementTypeName, !propSymbol.Type.IsValueType));
         }
 
         var fullProtoName = protoType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
@@ -111,12 +123,23 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
 
         foreach (var f in info.Fields)
         {
-            sb.AppendLine($"    private {f.TypeName} {f.FieldName};");
-            sb.AppendLine();
-            sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
-            sb.AppendLine("    {");
-            sb.AppendLine($"        get => {f.FieldName};");
-            sb.AppendLine("    }");
+            if (f.IsRepeated)
+            {
+                var fieldType = $"System.Collections.Generic.List<{f.ElementTypeName}>";
+                var propType = $"System.Collections.Generic.IReadOnlyList<{f.ElementTypeName}>";
+                sb.AppendLine($"    private readonly {fieldType} {f.FieldName} = new();");
+                sb.AppendLine();
+                sb.AppendLine($"    public {propType} {f.PropertyName} => {f.FieldName};");
+            }
+            else
+            {
+                sb.AppendLine($"    private {f.TypeName} {f.FieldName};");
+                sb.AppendLine();
+                sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        get => {f.FieldName};");
+                sb.AppendLine("    }");
+            }
             sb.AppendLine();
         }
 
@@ -124,7 +147,17 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        var proto = GetMirrorProto();");
         foreach (var f in info.Fields)
-            sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
+        {
+            if (f.IsRepeated)
+            {
+                sb.AppendLine($"        {f.FieldName}.Clear();");
+                sb.AppendLine($"        {f.FieldName}.AddRange(proto.{f.PropertyName});");
+            }
+            else
+            {
+                sb.AppendLine($"        {f.FieldName} = proto.{f.PropertyName};");
+            }
+        }
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    public void ApplyUpdate(byte[] data, string commit)");

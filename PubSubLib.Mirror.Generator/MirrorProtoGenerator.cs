@@ -67,7 +67,19 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             var typeName = propSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .TrimStartGlobalPrefix();
 
-            fields.Add(new FieldMapping(fieldName, propName, typeName));
+            var isRepeated = false;
+            var elementTypeName = typeName;
+            if (propSymbol.Type is INamedTypeSymbol namedType && namedType.IsGenericType
+                && namedType.MetadataName == "RepeatedField`1"
+                && namedType.ContainingNamespace?.ToDisplayString() == "Google.Protobuf.Collections")
+            {
+                isRepeated = true;
+                elementTypeName = namedType.TypeArguments[0]
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .TrimStartGlobalPrefix();
+            }
+
+            fields.Add(new FieldMapping(fieldName, propName, typeName, isRepeated, elementTypeName, !propSymbol.Type.IsValueType));
         }
 
         var fullProtoName = protoType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
@@ -128,25 +140,63 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
 
         foreach (var f in info.Fields)
         {
-            sb.AppendLine($"    private {f.TypeName} {f.FieldName};");
-            sb.AppendLine();
-            sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
-            sb.AppendLine("    {");
-            sb.AppendLine($"        get => {f.FieldName};");
-            sb.AppendLine($"        set => {f.FieldName} = value;");
-            sb.AppendLine("    }");
+            if (f.IsRepeated)
+            {
+                var listType = $"global::PubSubLib.Mirror.MirrorRepeatedList<{f.ElementTypeName}>";
+                sb.AppendLine($"    private readonly {listType} {f.FieldName} = new();");
+                sb.AppendLine();
+                sb.AppendLine($"    public {listType} {f.PropertyName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        get => {f.FieldName};");
+                sb.AppendLine("    }");
+            }
+            else
+            {
+                sb.AppendLine($"    private {f.TypeName} {f.FieldName};");
+                sb.AppendLine();
+                sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        get => {f.FieldName};");
+                sb.AppendLine($"        set => {f.FieldName} = value;");
+                sb.AppendLine("    }");
+            }
             sb.AppendLine();
         }
 
         sb.AppendLine("    public void Commit(string commit)");
         sb.AppendLine("    {");
         sb.AppendLine("        var proto = GetMirrorProto();");
+        foreach (var f in info.Fields)
+        {
+            if (f.IsRepeated)
+            {
+                sb.AppendLine($"        {f.ElementTypeName}[]? ___arr_{f.FieldName} = {f.FieldName}.IsDirty ? {f.FieldName}.ToArray() : null;");
+                sb.AppendLine($"        {f.FieldName}.ClearDirty();");
+            }
+        }
         sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(proto,");
         sb.AppendLine("            __bytes => _onChange?.Invoke(__bytes, commit),");
         sb.AppendLine("            __p =>");
         sb.AppendLine("            {");
         foreach (var f in info.Fields)
-            sb.AppendLine($"                __p.{f.PropertyName} = {f.FieldName};");
+        {
+            if (f.IsRepeated)
+            {
+                sb.AppendLine($"                if (___arr_{f.FieldName} is not null)");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    __p.{f.PropertyName}.Clear();");
+                sb.AppendLine($"                    __p.{f.PropertyName}.AddRange(___arr_{f.FieldName});");
+                sb.AppendLine("                }");
+            }
+            else if (f.IsReferenceType)
+            {
+                sb.AppendLine($"                if ({f.FieldName} is not null) __p.{f.PropertyName} = {f.FieldName};");
+            }
+            else
+            {
+                sb.AppendLine($"                __p.{f.PropertyName} = {f.FieldName};");
+            }
+        }
         sb.AppendLine("            });");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -175,11 +225,17 @@ internal readonly struct FieldMapping
     public readonly string FieldName;
     public readonly string PropertyName;
     public readonly string TypeName;
-    public FieldMapping(string fieldName, string propertyName, string typeName)
+    public readonly bool IsRepeated;
+    public readonly string ElementTypeName;
+    public readonly bool IsReferenceType;
+    public FieldMapping(string fieldName, string propertyName, string typeName, bool isRepeated, string elementTypeName, bool isReferenceType)
     {
         FieldName = fieldName;
         PropertyName = propertyName;
         TypeName = typeName;
+        IsRepeated = isRepeated;
+        ElementTypeName = elementTypeName;
+        IsReferenceType = isReferenceType;
     }
 }
 
