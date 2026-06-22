@@ -9,6 +9,7 @@ namespace PubSubLib;
 internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
 {
     private const string EvtTopic = "PlayerSpeaks.Evt";
+    private const string MsgTopic = "PlayerSpeaks.Msg";
     private const string StatusTopic = "PlayerSpeaks.Status";
 
     private readonly int _playerTimeoutSeconds;
@@ -68,6 +69,19 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                 Commit = commit
             };
             _natify.Publish(EvtTopic, evt);
+        });
+
+        data.OnMessage((subject, bytes) =>
+        {
+            if (!data.IsOnLine) return;
+            var evt = new MirrorMessageEvent
+            {
+                DataName = data.DataName,
+                PlayerId = playerId,
+                Subject = subject,
+                Data = ByteString.CopyFrom(bytes)
+            };
+            _natify.Publish(MsgTopic, evt);
         });
 
         return data;

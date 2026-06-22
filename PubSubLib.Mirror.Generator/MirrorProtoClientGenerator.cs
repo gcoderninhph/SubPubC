@@ -168,6 +168,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
+        sb.AppendLine("    private readonly Dictionary<string, List<Action<byte[]>>> _msgHandlers = new();");
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
         sb.AppendLine("    public long PlayerId { get => ___gs_playerId; set => ___gs_playerId = value; }");
@@ -182,6 +183,23 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    partial void OnCommit(string commit);");
+        sb.AppendLine();
+        sb.AppendLine("    public global::MyConnection.ISubscribe OnMessage<T>(string subject, Action<T> callback)");
+        sb.AppendLine("        where T : class, global::Google.Protobuf.IMessage<T>, new()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var parser = new global::Google.Protobuf.MessageParser<T>(() => new T());");
+        sb.AppendLine("        void handler(byte[] bytes) { callback(parser.ParseFrom(bytes)); }");
+        sb.AppendLine("        if (!_msgHandlers.TryGetValue(subject, out var list))");
+        sb.AppendLine("            _msgHandlers[subject] = list = new List<Action<byte[]>>();");
+        sb.AppendLine("        list.Add(handler);");
+        sb.AppendLine("        return new __MessageSubscription(() => list.Remove(handler));");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    void global::PubSubLib.Mirror.IPlayerMirrorClient.DispatchMessage(string subject, byte[] data)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (_msgHandlers.TryGetValue(subject, out var list))");
+        sb.AppendLine("            foreach (var h in list) h(data);");
+        sb.AppendLine("    }");
         sb.AppendLine();
 
         foreach (var f in info.Fields)
@@ -351,6 +369,13 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("        _mirrorProto = proto;");
         sb.AppendLine("        SyncFromProto();");
         sb.AppendLine("        OnCommit(commit);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private sealed class __MessageSubscription : global::MyConnection.ISubscribe");
+        sb.AppendLine("    {");
+        sb.AppendLine("        private readonly Action _unsubscribe;");
+        sb.AppendLine("        public void UnSubscribe() => _unsubscribe();");
+        sb.AppendLine("        public __MessageSubscription(Action unsubscribe) => _unsubscribe = unsubscribe;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
         if (!string.IsNullOrEmpty(info.Namespace))

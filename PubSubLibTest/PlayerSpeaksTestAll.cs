@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using MyConnection;
 using Natify;
 using PubSubLib;
@@ -245,6 +246,44 @@ public class PlayerSpeaksTestAll : IDisposable
         await Task.Delay(2000);
 
         Assert.False(serverData.IsOnLine);
+    }
+
+    [Fact]
+    public async Task FullStack_SendMessage_ServerToClient()
+    {
+        var playerId = 1L;
+        var signal = new ManualResetEventSlim();
+        ChatMsg? received = null;
+
+        CreateRouter();
+        await CreateServerAsync();
+
+        // pass 1: verify mirror client khớp mirror server
+        var serverData = _manager.CreateData<MirrorSendTestMirror>(playerId);
+
+        using var handle = await CreateClientAsync("test", playerId);
+        handle.ClientData.AddData<MirrorSendTestMirrorClient>();
+        var clientData = handle.ClientData.GetData<MirrorSendTestMirrorClient>();
+
+        await Task.Delay(2000);
+
+        Assert.NotNull(clientData);
+        Assert.Equal(playerId, clientData!.PlayerId);
+        Assert.Equal("MirrorSendTestMsg", clientData.DataName);
+
+        // pass 2: gửi ChatMsg → client nhận đúng nội dung
+        clientData.OnMessage<ChatMsg>("chat", msg =>
+        {
+            received = msg;
+            signal.Set();
+        });
+
+        serverData.SendMessage("chat", new ChatMsg { Text = "hello from server" });
+        MirrorProtoBus.Flush();
+
+        Assert.True(signal.Wait(10000), "Client did not receive SendMessage");
+        Assert.NotNull(received);
+        Assert.Equal("hello from server", received!.Text);
     }
 
     internal class Player(string id, string name) : IUser

@@ -27,6 +27,15 @@ public static class MirrorProtoBus
         });
     }
 
+    public static void EnqueueMessage<T>(string subject, T data, Action<string, byte[]>? notify) where T : class, IMessage
+    {
+        _channel.Writer.TryWrite(() =>
+        {
+            var bytes = data.ToByteArray();
+            notify?.Invoke(subject, bytes);
+        });
+    }
+
     public static void Flush()
     {
         while (_channel.Reader.TryRead(out var action))

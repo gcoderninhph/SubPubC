@@ -47,6 +47,13 @@ public partial class Vector3SingleStructTestMirrorClient
     partial void OnCommit(string commit) => LastCommit = commit;
 }
 
+[MirrorProtoClient(typeof(MirrorSendTestMsg))]
+public partial class MirrorSendTestMirrorClient
+{
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
+}
+
 public class MirrorProtoClientTests
 {
     [Fact]
@@ -434,5 +441,72 @@ public class MirrorProtoClientTests
         Assert.Equal(0f, list[0].Position.x);
         Assert.Equal(0f, list[0].Position.y);
         Assert.Equal(0f, list[0].Position.z);
+    }
+
+    [Fact]
+    public void OnMessage_ReceivesAndDeserializes()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        ChatMsg? received = null;
+        mirror.OnMessage<ChatMsg>("chat", msg => received = msg);
+
+        var chat = new ChatMsg { Text = "hello world" };
+        ((IPlayerMirrorClient)mirror).DispatchMessage("chat", chat.ToByteArray());
+
+        Assert.NotNull(received);
+        Assert.Equal("hello world", received!.Text);
+    }
+
+    [Fact]
+    public void OnMessage_MultipleHandlers_AllNotified()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        var received = new System.Collections.Concurrent.ConcurrentBag<string>();
+        mirror.OnMessage<ChatMsg>("chat", msg => received.Add("a:" + msg.Text));
+        mirror.OnMessage<ChatMsg>("chat", msg => received.Add("b:" + msg.Text));
+
+        var chat = new ChatMsg { Text = "hi" };
+        ((IPlayerMirrorClient)mirror).DispatchMessage("chat", chat.ToByteArray());
+
+        Assert.Equal(2, received.Count);
+        Assert.Contains("a:hi", received);
+        Assert.Contains("b:hi", received);
+    }
+
+    [Fact]
+    public void OnMessage_Unsubscribe_StopsReceiving()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        var received = new List<string>();
+        var sub = mirror.OnMessage<ChatMsg>("chat", msg => received.Add(msg.Text));
+
+        var chat = new ChatMsg { Text = "first" };
+        ((IPlayerMirrorClient)mirror).DispatchMessage("chat", chat.ToByteArray());
+        Assert.Single(received);
+
+        sub.UnSubscribe();
+
+        ((IPlayerMirrorClient)mirror).DispatchMessage("chat", new ChatMsg { Text = "second" }.ToByteArray());
+        Assert.Single(received);
+        Assert.Equal("first", received[0]);
+    }
+
+    [Fact]
+    public void DispatchMessage_NoHandler_DoesNotThrow()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        ((IPlayerMirrorClient)mirror).DispatchMessage("chat", new ChatMsg { Text = "hi" }.ToByteArray());
+    }
+
+    [Fact]
+    public void OnMessage_WrongSubject_NotDispatched()
+    {
+        var mirror = new MirrorSendTestMirrorClient();
+        var received = false;
+        mirror.OnMessage<ChatMsg>("chat", _ => received = true);
+
+        ((IPlayerMirrorClient)mirror).DispatchMessage("other", new ChatMsg { Text = "hi" }.ToByteArray());
+
+        Assert.False(received);
     }
 }

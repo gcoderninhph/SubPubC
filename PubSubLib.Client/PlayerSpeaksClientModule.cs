@@ -7,6 +7,7 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 {
     private readonly PlayerSpeaksClient _client;
     private ISubscribe? _tcpSub;
+    private ISubscribe? _msgSub;
     private ISubscribe? _welcomeSub;
 
     public PlayerSpeaksClientModule()
@@ -18,6 +19,7 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
     {
         _welcomeSub = client.SubscribeTcp<PlayerSpeaksWelcomeMsg>("PlayerSpeaks.Welcome", OnWelcome);
         _tcpSub = client.SubscribeTcp<PlayerSpeaksEvent>("PlayerSpeaks.Evt", OnEvent);
+        _msgSub = client.SubscribeTcp<MirrorMessageEvent>("PlayerSpeaks.Msg", OnMsg);
     }
 
     private void OnWelcome(PlayerSpeaksWelcomeMsg msg)
@@ -30,6 +32,11 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
         _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit);
     }
 
+    private void OnMsg(MirrorMessageEvent msg)
+    {
+        _client.DispatchMessage(msg.DataName, msg.Subject, msg.Data.ToByteArray());
+    }
+
     public IPlayerSpeaksClient Get()
     {
         return _client;
@@ -39,6 +46,7 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
     {
         _welcomeSub?.UnSubscribe();
         _tcpSub?.UnSubscribe();
+        _msgSub?.UnSubscribe();
         _client.Dispose();
     }
 }

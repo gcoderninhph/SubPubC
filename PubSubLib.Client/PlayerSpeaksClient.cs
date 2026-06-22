@@ -41,6 +41,12 @@ internal sealed class PlayerSpeaksClient : IPlayerSpeaksClient
             mirror.ApplyUpdate(data, commit);
     }
 
+    internal void DispatchMessage(string dataName, string subject, byte[] data)
+    {
+        if (_dataByName.TryGetValue(dataName, out var mirror))
+            mirror.DispatchMessage(subject, data);
+    }
+
     public void Dispose()
     {
         _data.Clear();

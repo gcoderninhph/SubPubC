@@ -54,6 +54,7 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
         });
 
         _natifyClient.OnPlayerSpeaks(OnPlayerSpeaks);
+        _natifyClient.OnMirrorMessage(OnMirrorMessage);
     }
 
     private void OnPlayerSpeaks(PlayerSpeaksEvent evt)
@@ -62,5 +63,13 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
 
         if (_connections.TryGetValue(evt.PlayerId, out var conn) && conn.Connected)
             _server.SendOnTcp("PlayerSpeaks.Evt", conn, evt);
+    }
+
+    private void OnMirrorMessage(MirrorMessageEvent msg)
+    {
+        if (_server == null) return;
+
+        if (_connections.TryGetValue(msg.PlayerId, out var conn) && conn.Connected)
+            _server.SendOnTcp("PlayerSpeaks.Msg", conn, msg);
     }
 }

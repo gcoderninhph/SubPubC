@@ -441,6 +441,54 @@ public class MirrorProtoTests
         Assert.False(list.IsDirty);
     }
 
+    [Fact]
+    public void SendMessage_SerializesDataCorrectly()
+    {
+        var mirror = new MirrorSendTestMirror();
+        (string subject, byte[] data)? received = null;
+        ((IPlayerData)mirror).OnMessage((s, b) => received = (s, b));
+
+        mirror.Version = 42;
+        mirror.Commit("commit");
+        MirrorProtoBus.Flush();
+
+        var chat = new ChatMsg { Text = "hello" };
+        mirror.SendMessage("chat", chat);
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(received);
+        Assert.Equal("chat", received!.Value.subject);
+        var parsed = ChatMsg.Parser.ParseFrom(received.Value.data);
+        Assert.Equal("hello", parsed.Text);
+    }
+
+    [Fact]
+    public void SendMessage_MultipleMessages_SerializedInOrder()
+    {
+        var mirror = new MirrorSendTestMirror();
+        var received = new System.Collections.Concurrent.ConcurrentBag<(string subject, byte[] data)>();
+        ((IPlayerData)mirror).OnMessage((s, b) => received.Add((s, b)));
+
+        mirror.SendMessage("first", new ChatMsg { Text = "one" });
+        mirror.SendMessage("second", new ChatMsg { Text = "two" });
+        MirrorProtoBus.Flush();
+
+        var list = received.ToArray();
+        Assert.Equal(2, list.Length);
+        Assert.Equal("first", list[0].subject);
+        Assert.Equal("one", ChatMsg.Parser.ParseFrom(list[0].data).Text);
+        Assert.Equal("second", list[1].subject);
+        Assert.Equal("two", ChatMsg.Parser.ParseFrom(list[1].data).Text);
+    }
+
+    [Fact]
+    public void SendMessage_NoHandler_DoesNotThrow()
+    {
+        var mirror = new MirrorSendTestMirror();
+        mirror.SendMessage("chat", new ChatMsg { Text = "hi" });
+        MirrorProtoBus.Flush();
+    }
+
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
@@ -470,5 +518,10 @@ public partial class Vector3StructTestMirror
 
 [MirrorProto(typeof(Vector3SingleStructTestMsg))]
 public partial class Vector3SingleStructTestMirror
+{
+}
+
+[MirrorProto(typeof(MirrorSendTestMsg))]
+public partial class MirrorSendTestMirror
 {
 }

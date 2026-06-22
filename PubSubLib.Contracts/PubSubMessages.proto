@@ -123,6 +123,15 @@ message PlayerSpeaksEvent {
     string commit = 4;
 }
 
+// Topic: PlayerSpeaks.Msg (Server -> Router -> Client via MyConnection)
+
+message MirrorMessageEvent {
+    string data_name = 1;
+    int64 player_id = 2;
+    string subject = 3;
+    bytes data = 4;
+}
+
 // ===== Mirror Struct Test =====
 
 message StructTestMsg {
@@ -169,4 +178,14 @@ message PlayerSpeaksWelcomeMsg {
 message PlayerOnlineStatusMsg {
     int64 player_id = 1;
     bool is_online = 2;
+}
+
+// ===== Mirror SendMessage Test =====
+
+message ChatMsg {
+    string text = 1;
+}
+
+message MirrorSendTestMsg {
+    int32 version = 1;
 }

@@ -333,6 +333,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
 
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
         sb.AppendLine("    private Action<byte[], string>? _onChange;");
+        sb.AppendLine("    private Action<string, byte[]>? _onMessage;");
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
         sb.AppendLine("    public long PlayerId => ___gs_playerId;");
@@ -354,6 +355,16 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine("    public void OnChange(Action<byte[], string> handler)");
         sb.AppendLine("    {");
         sb.AppendLine("        _onChange += handler;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    void global::PubSubLib.IPlayerData.OnMessage(Action<string, byte[]> handler)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        _onMessage += handler;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    public void SendMessage<T>(string subject, T data) where T : class, global::Google.Protobuf.IMessage");
+        sb.AppendLine("    {");
+        sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.EnqueueMessage(subject, data, _onMessage);");
         sb.AppendLine("    }");
         sb.AppendLine();
 
