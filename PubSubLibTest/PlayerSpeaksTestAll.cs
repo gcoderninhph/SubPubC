@@ -11,14 +11,11 @@ namespace PubSubLibTest;
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "RemoveWatcherCmd")]
 public partial class TestPlayerData
 {
-    private long _watcherId;
 }
 
 [MirrorProtoClient(typeof(RemoveWatcherCmd))]
 public partial class TestPlayerDataClient
 {
-    private long _watcherId;
-
     public string? LastCommit { get; private set; }
     partial void OnCommit(string commit) => LastCommit = commit;
 }

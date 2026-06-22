@@ -7,7 +7,6 @@ namespace PubSubLibTest;
 [MirrorProto(typeof(RemoveWatcherCmd))]
 public partial class RemoveWatcherMirror
 {
-    private long _watcherId;
 }
 
 public class MirrorProtoTests
@@ -115,5 +114,4 @@ public class MirrorProtoTests
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
 public partial class CustomDataNameMirror
 {
-    private long _watcherId;
 }

@@ -43,20 +43,25 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             .TrimStartGlobalPrefix() ?? "";
 
         var fields = new List<FieldMapping>();
-        var protoProps = protoType.GetMembers().OfType<IPropertySymbol>().ToDictionary(p => p.Name);
+        var reserved = new HashSet<string> { "PlayerId", "IsOnLine", "DataName" };
 
-        foreach (var member in classSymbol.GetMembers())
+        foreach (var member in protoType.GetMembers())
         {
-            if (member is not IFieldSymbol fieldSymbol) continue;
-            if (!fieldSymbol.Name.StartsWith("_")) continue;
+            if (member is not IPropertySymbol propSymbol) continue;
+            if (propSymbol.IsStatic) continue;
+            if (propSymbol.IsIndexer) continue;
+            if (!propSymbol.ExplicitInterfaceImplementations.IsEmpty) continue;
+            if (!SymbolEqualityComparer.Default.Equals(propSymbol.ContainingType, protoType)) continue;
 
-            var propName = ToPascalCase(fieldSymbol.Name);
-            if (!protoProps.TryGetValue(propName, out var protoProp)) continue;
+            var propName = propSymbol.Name;
+            if (reserved.Contains(propName)) continue;
+            if (propName.EndsWith("Case") && propSymbol.Type.TypeKind == TypeKind.Enum) continue;
 
-            var typeName = fieldSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            var fieldName = ToFieldName(propName);
+            var typeName = propSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .TrimStartGlobalPrefix();
 
-            fields.Add(new FieldMapping(fieldSymbol.Name, propName, typeName));
+            fields.Add(new FieldMapping(fieldName, propName, typeName));
         }
 
         var fullProtoName = protoType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
@@ -65,10 +70,10 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         return new MirrorClassInfo(ns, classSymbol.Name, fullProtoName, dataName, fields.ToArray());
     }
 
-    private static string ToPascalCase(string fieldName)
+    private static string ToFieldName(string propertyName)
     {
-        if (fieldName.Length <= 1) return fieldName;
-        return char.ToUpperInvariant(fieldName[1]) + fieldName.Substring(2);
+        if (string.IsNullOrEmpty(propertyName)) return "_";
+        return "_" + char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1);
     }
 
     private static void GenerateCode(SourceProductionContext context, MirrorClassInfo info)
@@ -106,6 +111,8 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
 
         foreach (var f in info.Fields)
         {
+            sb.AppendLine($"    private {f.TypeName} {f.FieldName};");
+            sb.AppendLine();
             sb.AppendLine($"    public {f.TypeName} {f.PropertyName}");
             sb.AppendLine("    {");
             sb.AppendLine($"        get => {f.FieldName};");

@@ -7,8 +7,6 @@ namespace PubSubLibTest;
 [MirrorProtoClient(typeof(RemoveWatcherCmd))]
 public partial class RemoveWatcherMirrorClient
 {
-    private long _watcherId;
-
     public string? LastCommit { get; private set; }
     partial void OnCommit(string commit) => LastCommit = commit;
 }
