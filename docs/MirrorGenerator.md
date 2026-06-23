@@ -26,7 +26,7 @@ Roslyn Incremental Source Generator tự động sinh code mirror proto từ cla
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.1" />
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.2" />
 <PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />
 ```
 
