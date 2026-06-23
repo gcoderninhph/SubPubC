@@ -14,7 +14,7 @@ Thư viện **Spatial Pub/Sub** cho game server viết bằng .NET. Theo dõi th
 
 | Thành phần | Package | Vai trò |
 |------------|---------|---------|
-| **Server** | `PubSubLib` | Sở hữu lưới không gian chính thống (authoritative). Tạo/di chuyển/hủy unit, quản lý watcher. |
+| **Server** | `PubSubLib` | Sở hữu lưới không gian chính thống (authoritative). Tạo/di chuyển/hủy unit, quản lý watcher, quản lý dữ liệu player (IPlayerSpeaksManager). PubSubLog + try-catch toàn hệ thống. |
 | **Router** | `PubSubLib.Router` | Cầu nối giữa game client và PubSub server. Map connection → watcherId, forward command lên NATS, demux event xuống từng client. |
 | **Client** | `PubSubLib.Client` | Chạy trong Unity/game process. Ping định kỳ để đồng bộ trạng thái, nhận event từ server để tạo/hủy GameObject. |
 
@@ -269,6 +269,10 @@ SubPubC.sln
 │   ├── EventChannel.cs       # Worker thread (Channel<Action>)
 │   ├── Cell.cs               # Grid cell
 │   ├── PubSubNatifySync.cs   # NATS bridge (inbound/outbound)
+│   ├── IPlayerSpeaksManager.cs  # Quản lý dữ liệu player (CreateData, RemoveAsync, GetData)
+│   ├── PlayerSpeaksManager.cs   # Implementation với OnDefault/OnRemove + CleanupLoop
+│   ├── IPlayerData.cs        # Interface cho dữ liệu player (DataName)
+│   ├── PubSubLog.cs          # Static logger class
 │   └── Messages/             # Protobuf definitions
 │
 ├── PubSubLib.Client/         # Game client module (netstandard2.1, Unity IL2CPP)
@@ -292,17 +296,22 @@ SubPubC.sln
 │   └── PubSubRouterModule.cs   # Maps connections ↔ watchers
 │
 ├── PubSubLib.Contracts/      # Shared protobuf messages
+├── PubSubLib.Mirror.Generator/ # Roslyn source generator (MirrorProto/MirrorProtoClient)
 ├── PubSubLibTest/            # Test project (xUnit)
+│   ├── PubSubTestAll.cs      # Unit + integration tests cho PubSub
+│   ├── PlayerSpeaksTestAll.cs # Integration tests cho PlayerSpeaksManager
+│   ├── MirrorProtoTests.cs   # Mirror proto serialize/deserialize
+│   └── MirrorProtoClientTests.cs # Mirror proto client-side tests
 └── SubPubCTest/              # ASP.NET Core test app
 ```
 
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.4.0" />              <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.6.0" />       <!-- Game client -->
-<PackageReference Include="PubSubLib.Router" Version="1.3.0" />       <!-- NATS bridge -->
-<PackageReference Include="PubSubLib.Contracts" Version="1.3.0" />    <!-- Protobuf messages -->
+<PackageReference Include="PubSubLib" Version="1.51.1" />              <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="1.8.1" />       <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="1.4.1" />       <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />    <!-- Protobuf messages -->
 ```
 
 ## Build & Test

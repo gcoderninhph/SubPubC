@@ -37,7 +37,7 @@ Router **không** chứa logic game. Nó chỉ là cầu nối — map connectio
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Router" Version="1.1.0" />
+<PackageReference Include="PubSubLib.Router" Version="1.4.1" />
 ```
 
 Hoặc project reference:

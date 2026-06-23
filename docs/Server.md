@@ -11,7 +11,8 @@ Package chứa toàn bộ logic không gian (spatial grid), quản lý Unit/Watc
   - [IPubSub](#ipubsub)
   - [IUnit](#iunit)
   - [UnitKey](#unitkey)
-- [2 chế độ sử dụng](#2-chế-độ-sử-dụng)
+  - [IPlayerSpeaksManager](#iplayerspeaksmanager)
+- [3 chế độ sử dụng](#3-chế-độ-sử-dụng)
   - [Standalone (không Natify)](#1-standalone-không-natify)
   - [Networked (có Natify)](#2-networked-có-natify)
 - [Luồng xử lý nội bộ](#luồng-xử-lý-nội-bộ)
@@ -29,7 +30,7 @@ Package chứa toàn bộ logic không gian (spatial grid), quản lý Unit/Watc
 Package multi-target `netstandard2.1` (Unity IL2CPP) và `net9.0` (standalone server):
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.1.0" />
+<PackageReference Include="PubSubLib" Version="1.51.1" />
 ```
 
 Hoặc project reference:
@@ -40,7 +41,7 @@ Hoặc project reference:
 
 Dependencies:
 - `System.Threading.Channels` — hàng đợi worker thread (bundled cho netstandard2.1)
-- `Natify` (v1.0.2) — optional, chỉ cần cho chế độ networked
+- `Natify` (v1.0.3) — optional, chỉ cần cho chế độ networked
 - `Google.Protobuf` (v3.34.1) — serialize binary message cho networked
 
 ---
@@ -185,7 +186,95 @@ Dùng trong `SyncLeave` callback và nội bộ `WatcherPingUnits` để định
 
 ---
 
-## 2 chế độ sử dụng
+### IPlayerSpeaksManager
+
+Quản lý dữ liệu cho từng player (đối tượng `IPlayerData`) gắn với `playerId`. Dữ liệu tồn tại xuyên suốt phiên — được tạo từ trước khi client connect, và không bị xóa khi client disconnect.
+
+```csharp
+public interface IPlayerSpeaksManager
+{
+    // ── Data lifecycle ──
+    T CreateData<T>(long playerId) where T : class, IPlayerData, new();
+    Task<bool> RemoveAsync(long playerId);
+    T? GetData<T>(long playerId) where T : class, IPlayerData, new();
+
+    // ── Lifecycle hooks ──
+    void OnDefault<T>(Func<T, Task>? handler) where T : class, IPlayerData, new();
+    void OnRemove<T>(Func<T, Task>? handler) where T : class, IPlayerData, new();
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `CreateData<T>(playerId)` | Tạo hoặc lấy dữ liệu hiện có cho player. Gọi `OnDefault<T>` nếu là lần đầu tạo. |
+| `RemoveAsync(playerId)` | Xóa toàn bộ dữ liệu của player. Trả về `true` nếu xóa thành công, `false` nếu player đang online hoặc không có dữ liệu. Gọi `OnRemove<T>` trước khi xóa. |
+| `GetData<T>(playerId)` | Lấy dữ liệu theo type. Trả về `null` nếu không có. |
+| `OnDefault<T>(handler)` | Đăng ký callback chạy khi `CreateData<T>` tạo dữ liệu lần đầu. Handler nhận instance `T` vừa tạo. |
+| `OnRemove<T>(handler)` | Đăng ký callback chạy TRƯỚC KHI dữ liệu bị xóa (qua `RemoveAsync` hoặc `CleanupLoop` timeout). Handler nhận instance `T` để xử lý cuối (save state, log, v.v.). |
+
+**Ràng buộc:**
+- `RemoveAsync` chỉ thành công khi player **không online** (`IsOnline == false`) — bảo vệ dữ liệu đang active
+- `OnRemove<T>` fire trước khi dữ liệu bị xóa khỏi `_data`, cho phép xử lý last-chance
+- `CleanupLoop` (background) cũng fire `OnRemove` để nhất quán giữa manual remove và timeout cleanup
+- Không publish NATS `PlayerOnlineStatusMsg` khi remove — player đã offline từ trước
+- Key nội bộ: `(string DataName, long PlayerId)` — mỗi `IPlayerData` type là 1 entry riêng
+
+**Kiến trúc nội bộ:**
+
+```csharp
+// PlayerSpeaksManager quản lý:
+private readonly Dictionary<PlayerDataKey, object> _data;              // dữ liệu player
+private readonly Dictionary<Type, IDefaultFactory> _defaults;         // handler OnDefault<T>
+private readonly Dictionary<Type, IRemovalHandler> _removeHandlers;   // handler OnRemove<T>
+```
+
+Player online status được theo dõi qua `_playerStates: Dictionary<long, PlayerState>` — cập nhật khi client connect/disconnect. Router gọi `SetOnline(playerId, true/false)` qua NATS khi client connect/disconnect.
+
+**Ví dụ:**
+
+```csharp
+var manager = new PlayerSpeaksManager(natifyServer, region: "VN");
+
+// Đăng ký handler cho dữ liệu mặc định
+manager.OnDefault<PlayerProfile>(async profile =>
+{
+    profile.Level = 1;
+    profile.Gold = 100;
+    await Task.CompletedTask;
+});
+
+// Đăng ký handler cho remove
+manager.OnRemove<PlayerProfile>(async profile =>
+{
+    await SaveToDatabase(profile);
+});
+
+// Tạo dữ liệu
+var profile = manager.CreateData<PlayerProfile>(playerId: 42);
+
+// Khi player offline, xóa dữ liệu
+var removed = await manager.RemoveAsync(42);
+// removed == true → dữ liệu đã bị xóa, OnRemove đã chạy
+
+// Kiểm tra
+var check = manager.GetData<PlayerProfile>(42); // null
+```
+
+### SendMessage / OnMessage (real-time messaging)
+
+Server có thể gửi message real-time đến client qua NATS + TCP.
+
+```csharp
+// Server gửi
+manager.SendMessage(playerId, "Welcome", data);
+
+// Router forward qua TCP topic "PubSub.Msg"
+// Client nhận qua OnMessage callback
+```
+
+---
+
+## 3 chế độ sử dụng
 
 ### 1. Standalone (không Natify)
 

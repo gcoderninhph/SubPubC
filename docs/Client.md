@@ -37,7 +37,7 @@ Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Client" Version="1.6.0" />
+<PackageReference Include="PubSubLib.Client" Version="1.8.1" />
 ```
 
 Package target `netstandard2.1` — tương thích Unity IL2CPP.
@@ -45,7 +45,7 @@ Package target `netstandard2.1` — tương thích Unity IL2CPP.
 Dependencies:
 - `PubSubLib.Contracts` — protobuf message types
 - `Google.Protobuf` (3.34.1) — deserialize message
-- `MyConnection` (1.0.4) — giao tiếp TCP/UDP với Router
+- `MyConnection` (1.0.5) — giao tiếp TCP/UDP với Router
 
 ---
 
