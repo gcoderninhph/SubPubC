@@ -65,6 +65,7 @@ internal sealed class PlayerSpeaksClient : IPlayerSpeaksClient
 
     public void Dispose()
     {
+        OnSendToServer = null;
         _data.Clear();
         _dataByName.Clear();
     }
