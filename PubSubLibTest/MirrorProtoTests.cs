@@ -466,20 +466,20 @@ public class MirrorProtoTests
     [Fact]
     public void SendMessage_MultipleMessages_SerializedInOrder()
     {
+        using var _ = MirrorProtoBus.SuppressBackground();
         var mirror = new MirrorSendTestMirror();
-        var received = new System.Collections.Concurrent.ConcurrentBag<(string subject, byte[] data)>();
+        var received = new System.Collections.Generic.List<(string subject, byte[] data)>();
         ((IPlayerData)mirror).OnMessage((s, b) => received.Add((s, b)));
 
         mirror.SendMessage("first", new ChatMsg { Text = "one" });
         mirror.SendMessage("second", new ChatMsg { Text = "two" });
         MirrorProtoBus.Flush();
 
-        var list = received.ToArray();
-        Assert.Equal(2, list.Length);
-        Assert.Equal("first", list[0].subject);
-        Assert.Equal("one", ChatMsg.Parser.ParseFrom(list[0].data).Text);
-        Assert.Equal("second", list[1].subject);
-        Assert.Equal("two", ChatMsg.Parser.ParseFrom(list[1].data).Text);
+        Assert.Equal(2, received.Count);
+        Assert.Equal("first", received[0].subject);
+        Assert.Equal("one", ChatMsg.Parser.ParseFrom(received[0].data).Text);
+        Assert.Equal("second", received[1].subject);
+        Assert.Equal("two", ChatMsg.Parser.ParseFrom(received[1].data).Text);
     }
 
     [Fact]

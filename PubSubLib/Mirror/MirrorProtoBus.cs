@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using PubSubLib.Contracts;
 using System;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -9,10 +10,22 @@ namespace PubSubLib.Mirror;
 public static class MirrorProtoBus
 {
     private static readonly Channel<Action> _channel = Channel.CreateUnbounded<Action>();
+    private static volatile int _suppressCount;
 
     static MirrorProtoBus()
     {
         _ = Task.Run(ProcessLoop);
+    }
+
+    public static IDisposable SuppressBackground()
+    {
+        Interlocked.Increment(ref _suppressCount);
+        return new SuppressDisposable();
+    }
+
+    private sealed class SuppressDisposable : IDisposable
+    {
+        public void Dispose() => Interlocked.Decrement(ref _suppressCount);
     }
 
     public static void Enqueue<T>(T proto, Action<byte[]> notify, Action<T> setter)
@@ -53,6 +66,11 @@ public static class MirrorProtoBus
         {
             while (await reader.WaitToReadAsync())
             {
+                if (Volatile.Read(ref _suppressCount) > 0)
+                {
+                    await Task.Delay(10);
+                    continue;
+                }
                 while (reader.TryRead(out var action))
                 {
                     try { action(); }
