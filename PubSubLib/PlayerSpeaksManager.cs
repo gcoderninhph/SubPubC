@@ -20,6 +20,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
     private readonly ConcurrentDictionary<PlayerDataKey, IPlayerData> _data = new();
     private readonly ConcurrentDictionary<PlayerDataKey, long> _lastActiveTicks = new();
     private readonly ConcurrentQueue<System.Action> _mainThreadActions = new();
+    private readonly ConcurrentDictionary<string, IDefaultFactory> _defaults = new();
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
     private Task? _cleanupTask;
@@ -31,7 +32,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         _cleanupIntervalSeconds = config.PlayerCleanupIntervalSeconds;
         _natify = natify;
 
-        _natify.Subscribe<PlayerOnlineStatusMsg>(StatusTopic, OnOnlineStatus);
+        _natify.SubscribeAsync<PlayerOnlineStatusMsg>(StatusTopic, OnOnlineStatus);
         _natify.Subscribe<ClientMirrorMessage>(ClientMsgTopic, OnClientMsg);
 
         _cts = new CancellationTokenSource();
@@ -117,11 +118,38 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         return data;
     }
 
-    private void OnOnlineStatus(Data<PlayerOnlineStatusMsg> args)
+    public void OnDefault<T>(Func<T, Task>? callback) where T : class, IPlayerData, new()
+    {
+        try
+        {
+            var t = new T();
+            _defaults[t.DataName] = new DefaultFactory<T>(t.DataName, callback);
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "OnDefault<T> failed");
+        }
+    }
+
+    private async Task OnOnlineStatus(Data<PlayerOnlineStatusMsg> args)
     {
         try
         {
             var msg = args.Value;
+
+            if (msg.IsOnline)
+            {
+                foreach (var kv in _defaults)
+                {
+                    var key = new PlayerDataKey(kv.Key, msg.PlayerId);
+                    if (!_data.ContainsKey(key))
+                    {
+                        try { await kv.Value.CreateAndInitAsync(msg.PlayerId, this); }
+                        catch (Exception ex) { PubSubLog.Error(ex, $"Auto-create {kv.Key} failed"); }
+                    }
+                }
+            }
+
             foreach (var kv in _data)
             {
                 if (kv.Key.PlayerId == msg.PlayerId)
@@ -194,6 +222,35 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
             {
                 PubSubLog.Error(ex, "CleanupLoop failed");
             }
+        }
+    }
+
+    private interface IDefaultFactory
+    {
+        string DataName { get; }
+        Task<IPlayerData> CreateAndInitAsync(long playerId, PlayerSpeaksManager manager);
+    }
+
+    private sealed class DefaultFactory<T> : IDefaultFactory where T : class, IPlayerData, new()
+    {
+        private readonly Func<T, Task>? _callback;
+        public string DataName { get; }
+
+        public DefaultFactory(string dataName, Func<T, Task>? callback)
+        {
+            DataName = dataName;
+            _callback = callback;
+        }
+
+        public async Task<IPlayerData> CreateAndInitAsync(long playerId, PlayerSpeaksManager manager)
+        {
+            var data = manager.CreateData<T>(playerId);
+            if (_callback != null)
+            {
+                try { await _callback(data); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnDefault callback failed"); }
+            }
+            return data;
         }
     }
 

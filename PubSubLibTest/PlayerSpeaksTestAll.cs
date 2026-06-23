@@ -321,6 +321,40 @@ public class PlayerSpeaksTestAll : IDisposable
         Assert.Equal("hello from client", received!.Text);
     }
 
+    [Fact]
+    public async Task FullStack_OnDefault_AutoCreatesDataOnClientConnect()
+    {
+        var playerId = 99L;
+
+        CreateRouter();
+        await CreateServerAsync();
+
+        _manager.OnDefault<TestPlayerData>(async data =>
+        {
+            data.WatcherId = 42;
+            data.Commit("default_init");
+        });
+
+        await Task.Delay(3000);
+
+        using var handle = await CreateClientAsync("defaultTest", playerId);
+
+        handle.ClientData.AddData<TestPlayerDataClient>();
+        var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
+        Assert.NotNull(clientData);
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (clientData!.WatcherId == 42)
+                break;
+            await Task.Delay(50);
+        }
+
+        Assert.Equal(42L, clientData!.WatcherId);
+        Assert.Equal("default_init", clientData.LastCommit);
+    }
+
     internal class Player(string id, string name) : IUser
     {
         public string Name => name;

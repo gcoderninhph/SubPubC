@@ -1,4 +1,5 @@
 using Natify;
+using PubSubLib.Contracts;
 
 namespace PubSubLib
 {
@@ -33,6 +34,22 @@ namespace PubSubLib
                 ((NatifyClient)_client).OnMessage(topic, handler);
             else
                 ((NatifyClientFast)_client).OnMessage(topic, handler);
+        }
+
+        public void SubscribeAsync<T>(string topic, Func<Data<T>, Task> handler) where T : Google.Protobuf.IMessage, new()
+        {
+            if (_isUnity)
+                ((NatifyClient)_client).OnMessage<T>(topic, async args =>
+                {
+                    try { await handler(args); }
+                    catch (Exception ex) { PubSubLog.Error(ex, "SubscribeAsync failed"); }
+                });
+            else
+                ((NatifyClientFast)_client).OnMessage<T>(topic, async args =>
+                {
+                    try { await handler(args); }
+                    catch (Exception ex) { PubSubLog.Error(ex, "SubscribeAsync failed"); }
+                });
         }
 
         public void Dispose()

@@ -9,4 +9,5 @@ public interface IPlayerSpeaksManager : IDisposable
 
     T CreateData<T>(long playerId) where T : class, IPlayerData, new();
     void Tick();
+    void OnDefault<T>(Func<T, Task>? callback) where T : class, IPlayerData, new();
 }
