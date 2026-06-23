@@ -16,6 +16,7 @@ Roslyn Incremental Source Generator tự động sinh code mirror proto từ cla
   - [Vector3 (danh sách)](#4-vector3-danh-sách)
   - [Struct Group (SoA)](#5-struct-group-struct-of-arrays)
   - [Struct + Vector3 con](#6-struct--vector3-con)
+  - [Primitive Array trong struct](#7-primitive-array-trong-struct)
 - [Quy luật đặt tên proto](#quy-luật-đặt-tên-proto)
 - [Quy tắc chung](#quy-tắc-chung)
 - [So sánh Server vs Client](#so-sánh-server-vs-client)
@@ -26,7 +27,7 @@ Roslyn Incremental Source Generator tự động sinh code mirror proto từ cla
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.2" />
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.3" />
 <PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />
 ```
 
@@ -332,6 +333,55 @@ Commit:
 
 ---
 
+### 7. Primitive Array trong struct
+
+Cho phép mỗi struct entry chứa một mảng kiểu nguyên thủy (int, long, float, double, string, bool).
+
+```protobuf
+message TroopData {
+    repeated string struct_x_player_x_name = 1;
+    repeated int64 struct_x_player_x_bean_array_value = 2;   // giá trị flat
+    repeated int32 struct_x_player_x_bean_array_count = 3;   // số phần tử mỗi entry
+}
+```
+
+**Quy ước:** Mỗi cặp `{prefix}ArrayValue` + `{prefix}ArrayCount` trong cùng struct group tạo ra mảng `{prefix}[]` trong struct.
+
+- `*ArrayValue` (`repeated T`) — tất cả giá trị của mọi element nối tiếp
+- `*ArrayCount` (`repeated int32`) — số lượng phần tử trong mỗi entry
+- `T` có thể là bất kỳ kiểu nguyên thủy: `int`, `long`, `float`, `double`, `string`, `bool`
+
+Struct sinh ra:
+```csharp
+public readonly struct Player
+{
+    public string Name { get; }
+    public long[] Bean { get; }
+}
+```
+
+Commit:
+- Clear `*ArrayValue` và `*ArrayCount`
+- Duyệt từng Player: add `bean.Length` vào `*ArrayCount`, add từng giá trị vào `*ArrayValue`
+- Array null hoặc rỗng → count = 0, không add value nào
+
+SyncFromProto (client):
+- Dùng `*ArrayCount[i]` để biết số phần tử của entry thứ i
+- Đọc `*ArrayCount[i]` phần tử từ `*ArrayValue` bằng offset tracker
+
+Multiple primitive arrays trong cùng struct:
+```protobuf
+message MultiArrayMsg {
+    repeated int64 struct_x_player_x_bean_array_value = 1;
+    repeated int32 struct_x_player_x_bean_array_count = 2;
+    repeated float struct_x_player_x_scores_array_value = 3;
+    repeated int32 struct_x_player_x_scores_array_count = 4;
+}
+```
+→ `struct Player { long[] Bean; float[] Scores; }`
+
+---
+
 ## Quy luật đặt tên proto
 
 ### DataName
@@ -385,6 +435,13 @@ Proto:      Struct_X_Player_X_Id
 | `{name}Vector3S` | List Vector3 | `WaypointsVector3S` → `List<Vector3> Waypoints` |
 | `{name}Vector3SValue` | Array Vector3 trong struct | `PathVector3SValue` + `PathVector3SCount` |
 | `{name}Vector3SCount` | Đếm số Vector3/element trong struct | Đi cùng `*Vector3SValue` |
+
+### Primitive Array naming
+
+| Pattern | Ý nghĩa | Ví dụ |
+|---------|---------|-------|
+| `{name}ArrayValue` | Mảng nguyên thủy trong struct | `BeanArrayValue` → `long[] Bean` |
+| `{name}ArrayCount` | Đếm số phần tử/element | Đi cùng `*ArrayValue`, type `repeated int32` |
 
 ---
 

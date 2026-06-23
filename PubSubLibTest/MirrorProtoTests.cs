@@ -563,6 +563,100 @@ public class MirrorProtoTests
         Assert.Empty(actions);
     }
 
+    [Fact]
+    public void PrimitiveArray_AddItem_Commit_SendsData()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", new long[] { 10, 20 }, new float[] { 0.5f, 1.0f }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = PrimitiveArrayStructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "ninh" }, parsed.StructXPlayerXName);
+        Assert.Equal(new long[] { 10, 20 }, parsed.StructXPlayerXBeanArrayValue);
+        Assert.Equal(new int[] { 2 }, parsed.StructXPlayerXBeanArrayCount);
+        Assert.Equal(new float[] { 0.5f, 1.0f }, parsed.StructXPlayerXScoresArrayValue);
+        Assert.Equal(new int[] { 2 }, parsed.StructXPlayerXScoresArrayCount);
+    }
+
+    [Fact]
+    public void PrimitiveArray_MultipleItems_Commit()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "a", new long[] { 1 }, new float[] { 0.1f }));
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(2, "b", new long[] { 2, 3 }, new float[] { 0.2f, 0.3f }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = PrimitiveArrayStructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1, 2 }, parsed.StructXPlayerXId);
+        Assert.Equal(new string[] { "a", "b" }, parsed.StructXPlayerXName);
+        Assert.Equal(new long[] { 1, 2, 3 }, parsed.StructXPlayerXBeanArrayValue);
+        Assert.Equal(new int[] { 1, 2 }, parsed.StructXPlayerXBeanArrayCount);
+        Assert.Equal(new float[] { 0.1f, 0.2f, 0.3f }, parsed.StructXPlayerXScoresArrayValue);
+        Assert.Equal(new int[] { 1, 2 }, parsed.StructXPlayerXScoresArrayCount);
+    }
+
+    [Fact]
+    public void PrimitiveArray_EmptyArray_Commit_CountZero()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "x", System.Array.Empty<long>(), new float[] { 0.5f }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = PrimitiveArrayStructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.StructXPlayerXId);
+        Assert.Empty(parsed.StructXPlayerXBeanArrayValue);
+        Assert.Equal(new int[] { 0 }, parsed.StructXPlayerXBeanArrayCount);
+    }
+
+    [Fact]
+    public void PrimitiveArray_NullArray_Commit_CountZero()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "x", null!, new float[] { 0.5f }));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = PrimitiveArrayStructTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new int[] { 0 }, parsed.StructXPlayerXBeanArrayCount);
+        Assert.Empty(parsed.StructXPlayerXBeanArrayValue);
+    }
+
+    [Fact]
+    public void PrimitiveArray_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+
+        var list = mirror.Players;
+        Assert.False(list.IsDirty);
+
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "x", new long[] { 1 }, new float[] { 0.1f }));
+        Assert.True(list.IsDirty);
+
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+        Assert.False(list.IsDirty);
+    }
+
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
@@ -597,5 +691,10 @@ public partial class Vector3SingleStructTestMirror
 
 [MirrorProto(typeof(MirrorSendTestMsg))]
 public partial class MirrorSendTestMirror
+{
+}
+
+[MirrorProto(typeof(PrimitiveArrayStructTestMsg))]
+public partial class PrimitiveArrayStructTestMirror
 {
 }

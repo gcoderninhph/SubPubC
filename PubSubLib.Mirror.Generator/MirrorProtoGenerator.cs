@@ -217,13 +217,37 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 vecUsedIndices.Add(si);
             }
 
+            var primArrayFields = new List<StructPrimitiveArrayField>();
+            var primUsedIndices = new HashSet<int>(vecUsedIndices);
+            for (int ai = 0; ai < members.Count; ai++)
+            {
+                if (primUsedIndices.Contains(ai)) continue;
+                var afn = fieldPropNames[ai];
+                if (!afn.EndsWith("ArrayValue") || afn.Length <= 10) continue;
+                var prefix = afn.Substring(0, afn.Length - 10);
+                for (int ci = 0; ci < members.Count; ci++)
+                {
+                    if (ci == ai || primUsedIndices.Contains(ci)) continue;
+                    var cfn = fieldPropNames[ci];
+                    if (!cfn.EndsWith("ArrayCount") || cfn.Length <= 10) continue;
+                    if (elementTypes[ci] != "int") continue;
+                    if (cfn.Substring(0, cfn.Length - 10) == prefix)
+                    {
+                        primArrayFields.Add(new StructPrimitiveArrayField(prefix, protoPropNames[ai], protoPropNames[ci], elementTypes[ai]));
+                        primUsedIndices.Add(ai);
+                        primUsedIndices.Add(ci);
+                        break;
+                    }
+                }
+            }
+
             var filteredProtoPropNames = new List<string>();
             var filteredFieldPropNames = new List<string>();
             var filteredElementTypes = new List<string>();
             var filteredIsRefTypes = new List<bool>();
             for (int i = 0; i < members.Count; i++)
             {
-                if (vecUsedIndices.Contains(i)) continue;
+                if (primUsedIndices.Contains(i)) continue;
                 filteredProtoPropNames.Add(protoPropNames[i]);
                 filteredFieldPropNames.Add(fieldPropNames[i]);
                 filteredElementTypes.Add(elementTypes[i]);
@@ -233,7 +257,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             groups.Add(new StructGroup(structName, fieldName,
                 filteredProtoPropNames.ToArray(), filteredFieldPropNames.ToArray(),
                 filteredElementTypes.ToArray(), filteredIsRefTypes.ToArray(),
-                vec3Fields.ToArray()));
+                vec3Fields.ToArray(), primArrayFields.ToArray()));
         }
 
         return (groups.ToArray(), index);
@@ -306,6 +330,10 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
                 sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
             }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
+            }
             sb.AppendLine();
             var ctorArgs = new List<string>();
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
@@ -318,6 +346,11 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
                 ctorArgs.Add($"{v3Type} {argName}");
             }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                ctorArgs.Add($"{pa.ElementType}[] {argName}");
+            }
             sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
             sb.AppendLine("        {");
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
@@ -329,6 +362,11 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             {
                 var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                 sb.AppendLine($"            {vf.FieldName} = {argName};");
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                sb.AppendLine($"            {pa.FieldName} = {argName};");
             }
             sb.AppendLine("        }");
             sb.AppendLine("    }");
@@ -508,6 +546,11 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                     if (vf.IsArray)
                         sb.AppendLine($"                    __p.{vf.CountProtoName}.Clear();");
                 }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    sb.AppendLine($"                    __p.{pa.ValueProtoName}.Clear();");
+                    sb.AppendLine($"                    __p.{pa.CountProtoName}.Clear();");
+                }
                 sb.AppendLine($"                    foreach (var __item in ___arr_{sg.FieldName})");
                 sb.AppendLine("                    {");
                 for (int i = 0; i < sg.ProtoPropNames.Length; i++)
@@ -534,6 +577,14 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                         sb.AppendLine($"                        __p.{vf.ValueProtoName}.Add(__item.{vf.FieldName}.y);");
                         sb.AppendLine($"                        __p.{vf.ValueProtoName}.Add(__item.{vf.FieldName}.z);");
                     }
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    sb.AppendLine($"                        var ___arr_{pa.FieldName} = __item.{pa.FieldName};");
+                    sb.AppendLine($"                        __p.{pa.CountProtoName}.Add(___arr_{pa.FieldName}?.Length ?? 0);");
+                    sb.AppendLine($"                        if (___arr_{pa.FieldName} is not null)");
+                    sb.AppendLine($"                            foreach (var __v in ___arr_{pa.FieldName})");
+                    sb.AppendLine($"                                __p.{pa.ValueProtoName}.Add(__v);");
                 }
                 sb.AppendLine("                    }");
                 sb.AppendLine("                }");
@@ -668,6 +719,21 @@ internal sealed class StructVector3Field
     }
 }
 
+internal sealed class StructPrimitiveArrayField
+{
+    public readonly string FieldName;
+    public readonly string ValueProtoName;
+    public readonly string CountProtoName;
+    public readonly string ElementType;
+    public StructPrimitiveArrayField(string fieldName, string valueProtoName, string countProtoName, string elementType)
+    {
+        FieldName = fieldName;
+        ValueProtoName = valueProtoName;
+        CountProtoName = countProtoName;
+        ElementType = elementType;
+    }
+}
+
 internal sealed class StructGroup
 {
     public readonly string StructName;
@@ -677,7 +743,8 @@ internal sealed class StructGroup
     public readonly string[] ElementTypes;
     public readonly bool[] IsRefTypes;
     public readonly StructVector3Field[] Vector3Fields;
-    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes, StructVector3Field[] vector3Fields)
+    public readonly StructPrimitiveArrayField[] PrimitiveArrayFields;
+    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes, StructVector3Field[] vector3Fields, StructPrimitiveArrayField[] primitiveArrayFields)
     {
         StructName = structName;
         FieldName = fieldName;
@@ -686,6 +753,7 @@ internal sealed class StructGroup
         ElementTypes = elementTypes;
         IsRefTypes = isRefTypes;
         Vector3Fields = vector3Fields;
+        PrimitiveArrayFields = primitiveArrayFields;
     }
 }
 

@@ -143,6 +143,10 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
                 var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
                 sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
             }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
+            }
             sb.AppendLine();
             var ctorArgs = new List<string>();
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
@@ -155,6 +159,11 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
                 var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
                 ctorArgs.Add($"{v3Type} {argName}");
             }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                ctorArgs.Add($"{pa.ElementType}[] {argName}");
+            }
             sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
             sb.AppendLine("        {");
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
@@ -166,6 +175,11 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             {
                 var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                 sb.AppendLine($"            {vf.FieldName} = {argName};");
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                sb.AppendLine($"            {pa.FieldName} = {argName};");
             }
             sb.AppendLine("        }");
             sb.AppendLine("    }");
@@ -291,7 +305,16 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
                 if (vf.IsArray)
                     sb.AppendLine($"        int ___vecOff_{vf.FieldName} = 0;");
             }
-            sb.AppendLine($"        int __count = proto.{sg.ProtoPropNames[0]}.Count;");
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                sb.AppendLine($"        int ___arrOff_{pa.FieldName} = 0;");
+            }
+            if (sg.ProtoPropNames.Length > 0)
+                sb.AppendLine($"        int __count = proto.{sg.ProtoPropNames[0]}.Count;");
+            else if (sg.PrimitiveArrayFields.Length > 0)
+                sb.AppendLine($"        int __count = proto.{sg.PrimitiveArrayFields[0].CountProtoName}.Count;");
+            else
+                sb.AppendLine($"        int __count = proto.{sg.Vector3Fields[0].CountProtoName ?? sg.Vector3Fields[0].ValueProtoName}.Count / 3;");
             sb.AppendLine("        for (int __i = 0; __i < __count; __i++)");
             sb.AppendLine("        {");
             var ctorArgs = new List<string>();
@@ -339,6 +362,19 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
                     sb.AppendLine("                : default;");
                     ctorArgs.Add(accField);
                 }
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var accField = $"___arrAcc_{pa.FieldName}";
+                sb.AppendLine($"            int ___arrCnt_{pa.FieldName} = __i < proto.{pa.CountProtoName}.Count ? proto.{pa.CountProtoName}[__i] : 0;");
+                sb.AppendLine($"            var {accField} = new {pa.ElementType}[___arrCnt_{pa.FieldName}];");
+                sb.AppendLine($"            for (int __j = 0; __j < ___arrCnt_{pa.FieldName}; __j++)");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                int __b = ___arrOff_{pa.FieldName} + __j;");
+                sb.AppendLine($"                {accField}[__j] = __b < proto.{pa.ValueProtoName}.Count ? proto.{pa.ValueProtoName}[__b] : default;");
+                sb.AppendLine("            }");
+                sb.AppendLine($"            ___arrOff_{pa.FieldName} += ___arrCnt_{pa.FieldName};");
+                ctorArgs.Add(accField);
             }
             sb.AppendLine($"            {sg.FieldName}.Add(new {sg.StructName}({string.Join(", ", ctorArgs)}));");
             sb.AppendLine("        }");

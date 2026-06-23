@@ -189,6 +189,18 @@ message PlayerOnlineStatusMsg {
     bool is_online = 2;
 }
 
+// ===== Mirror Primitive Array Struct Test =====
+
+message PrimitiveArrayStructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated int64 struct_x_player_x_bean_array_value = 3;
+    repeated int32 struct_x_player_x_bean_array_count = 4;
+    repeated float struct_x_player_x_scores_array_value = 5;
+    repeated int32 struct_x_player_x_scores_array_count = 6;
+    int32 version = 7;
+}
+
 // ===== Mirror SendMessage Test =====
 
 message ChatMsg {

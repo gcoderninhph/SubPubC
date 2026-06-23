@@ -54,6 +54,13 @@ public partial class MirrorSendTestMirrorClient
     partial void OnCommit(string commit) => LastCommit = commit;
 }
 
+[MirrorProtoClient(typeof(PrimitiveArrayStructTestMsg))]
+public partial class PrimitiveArrayStructTestMirrorClient
+{
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
+}
+
 public class MirrorProtoClientTests
 {
     [Fact]
@@ -531,5 +538,106 @@ public class MirrorProtoClientTests
     {
         var mirror = new MirrorSendTestMirrorClient();
         mirror.SendMessage("chat", new ChatMsg { Text = "hi" });
+    }
+
+    [Fact]
+    public void PrimitiveArray_ApplyUpdate_Deserializes()
+    {
+        var mirror = new PrimitiveArrayStructTestMirrorClient();
+        var proto = new PrimitiveArrayStructTestMsg
+        {
+            StructXPlayerXId = { 1 },
+            StructXPlayerXName = { "ninh" },
+            StructXPlayerXBeanArrayValue = { 10, 20 },
+            StructXPlayerXBeanArrayCount = { 2 },
+            StructXPlayerXScoresArrayValue = { 0.5f, 1.0f },
+            StructXPlayerXScoresArrayCount = { 2 }
+        };
+
+        mirror.ApplyUpdate(proto.ToByteArray(), "init");
+
+        Assert.Single(mirror.Players);
+        var p = mirror.Players[0];
+        Assert.Equal(1L, p.Id);
+        Assert.Equal("ninh", p.Name);
+        Assert.Equal(new long[] { 10, 20 }, p.Bean);
+        Assert.Equal(new float[] { 0.5f, 1.0f }, p.Scores);
+    }
+
+    [Fact]
+    public void PrimitiveArray_MultipleItems_Deserializes()
+    {
+        var mirror = new PrimitiveArrayStructTestMirrorClient();
+        var proto = new PrimitiveArrayStructTestMsg
+        {
+            StructXPlayerXId = { 1, 2 },
+            StructXPlayerXName = { "a", "b" },
+            StructXPlayerXBeanArrayValue = { 1, 2, 3 },
+            StructXPlayerXBeanArrayCount = { 1, 2 },
+            StructXPlayerXScoresArrayValue = { 0.1f, 0.2f, 0.3f },
+            StructXPlayerXScoresArrayCount = { 1, 2 }
+        };
+
+        mirror.ApplyUpdate(proto.ToByteArray(), "init");
+
+        Assert.Equal(2, mirror.Players.Count);
+        var p0 = mirror.Players[0];
+        Assert.Equal(new long[] { 1 }, p0.Bean);
+        Assert.Equal(new float[] { 0.1f }, p0.Scores);
+        var p1 = mirror.Players[1];
+        Assert.Equal(new long[] { 2, 3 }, p1.Bean);
+        Assert.Equal(new float[] { 0.2f, 0.3f }, p1.Scores);
+    }
+
+    [Fact]
+    public void PrimitiveArray_EmptyArray_Deserializes()
+    {
+        var mirror = new PrimitiveArrayStructTestMirrorClient();
+        var proto = new PrimitiveArrayStructTestMsg
+        {
+            StructXPlayerXId = { 1 },
+            StructXPlayerXName = { "x" },
+            StructXPlayerXBeanArrayCount = { 0 },
+            StructXPlayerXScoresArrayCount = { 0 }
+        };
+
+        mirror.ApplyUpdate(proto.ToByteArray(), "init");
+
+        Assert.Single(mirror.Players);
+        var p = mirror.Players[0];
+        Assert.Empty(p.Bean);
+        Assert.Empty(p.Scores);
+    }
+
+    [Fact]
+    public void PrimitiveArray_SecondApplyUpdate_Replaces()
+    {
+        var mirror = new PrimitiveArrayStructTestMirrorClient();
+        mirror.ApplyUpdate(new PrimitiveArrayStructTestMsg
+        {
+            StructXPlayerXId = { 1 },
+            StructXPlayerXName = { "first" },
+            StructXPlayerXBeanArrayValue = { 1, 2 },
+            StructXPlayerXBeanArrayCount = { 2 },
+            StructXPlayerXScoresArrayValue = { 0.1f },
+            StructXPlayerXScoresArrayCount = { 1 }
+        }.ToByteArray(), "init");
+
+        mirror.ApplyUpdate(new PrimitiveArrayStructTestMsg
+        {
+            StructXPlayerXId = { 2 },
+            StructXPlayerXName = { "second" },
+            StructXPlayerXBeanArrayValue = { 3, 4, 5 },
+            StructXPlayerXBeanArrayCount = { 3 },
+            StructXPlayerXScoresArrayValue = { 0.2f, 0.3f },
+            StructXPlayerXScoresArrayCount = { 2 }
+        }.ToByteArray(), "update");
+
+        Assert.Single(mirror.Players);
+        var p = mirror.Players[0];
+        Assert.Equal(2L, p.Id);
+        Assert.Equal("second", p.Name);
+        Assert.Equal(new long[] { 3, 4, 5 }, p.Bean);
+        Assert.Equal(new float[] { 0.2f, 0.3f }, p.Scores);
     }
 }
