@@ -355,6 +355,42 @@ public class PlayerSpeaksTestAll : IDisposable
         Assert.Equal("default_init", clientData.LastCommit);
     }
 
+    [Fact]
+    public async Task FullStack_RemoveAsync_RejectsOnline_RemovesOffline_FiresOnRemove()
+    {
+        var onlinePlayerId = 99L;
+        var offlinePlayerId = 100L;
+
+        CreateRouter();
+        await CreateServerAsync();
+
+        var dataOnline = _manager.CreateData<TestPlayerData>(onlinePlayerId);
+        var dataOffline = _manager.CreateData<TestPlayerData>(offlinePlayerId);
+
+        TestPlayerData? removedData = null;
+        _manager.OnRemove<TestPlayerData>(async data =>
+        {
+            removedData = data;
+            await Task.CompletedTask;
+        });
+
+        using var handle = await CreateClientAsync("onlineUser", onlinePlayerId);
+        await Task.Delay(2000);
+
+        var resultOnline = await _manager.RemoveAsync(onlinePlayerId);
+        var resultOffline = await _manager.RemoveAsync(offlinePlayerId);
+        Assert.False(resultOnline);
+        Assert.True(resultOffline);
+
+        Assert.NotNull(removedData);
+        Assert.Same(dataOffline, removedData);
+
+        var afterOnline = _manager.GetData<TestPlayerData>(onlinePlayerId);
+        var afterOffline = _manager.GetData<TestPlayerData>(offlinePlayerId);
+        Assert.NotNull(afterOnline);
+        Assert.Null(afterOffline);
+    }
+
     internal class Player(string id, string name) : IUser
     {
         public string Name => name;

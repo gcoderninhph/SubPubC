@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using Google.Protobuf;
 using Natify;
@@ -21,6 +22,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
     private readonly ConcurrentDictionary<PlayerDataKey, long> _lastActiveTicks = new();
     private readonly ConcurrentQueue<System.Action> _mainThreadActions = new();
     private readonly ConcurrentDictionary<string, IDefaultFactory> _defaults = new();
+    private readonly ConcurrentDictionary<string, IRemovalHandler> _removeHandlers = new();
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
     private Task? _cleanupTask;
@@ -118,6 +120,25 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         return data;
     }
 
+    public T? GetData<T>(long playerId) where T : class, IPlayerData, new()
+    {
+        try
+        {
+            var t = new T();
+            var key = new PlayerDataKey(t.DataName, playerId);
+
+            if (_data.TryGetValue(key, out var existing) && existing is T typed)
+                return typed;
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "GetData<T> failed");
+            return null;
+        }
+    }
+
     public void OnDefault<T>(Func<T, Task>? callback) where T : class, IPlayerData, new()
     {
         try
@@ -128,6 +149,65 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         catch (Exception ex)
         {
             PubSubLog.Error(ex, "OnDefault<T> failed");
+        }
+    }
+
+    public void OnRemove<T>(Func<T, Task>? callback) where T : class, IPlayerData, new()
+    {
+        try
+        {
+            var t = new T();
+            _removeHandlers[t.DataName] = new RemovalHandler<T>(t.DataName, callback);
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "OnRemove<T> failed");
+        }
+    }
+
+    public async Task<bool> RemoveAsync(long playerId)
+    {
+        try
+        {
+            var keys = new List<PlayerDataKey>();
+            foreach (var kv in _data)
+            {
+                if (kv.Key.PlayerId == playerId)
+                    keys.Add(kv.Key);
+            }
+
+            if (keys.Count == 0)
+                return false;
+
+            foreach (var key in keys)
+            {
+                if (_data.TryGetValue(key, out var existing) && existing.IsOnLine)
+                    return false;
+            }
+
+            foreach (var key in keys)
+            {
+                if (_data.TryRemove(key, out var data))
+                {
+                    if (_removeHandlers.TryGetValue(key.DataName, out var handler))
+                    {
+                        try { await handler.HandleAsync(data); }
+                        catch (Exception ex) { PubSubLog.Error(ex, "RemoveAsync OnRemove failed"); }
+                    }
+
+                    if (data is IPlayerDataInternal di)
+                        di.SetOnline(false);
+
+                    _lastActiveTicks.TryRemove(key, out _);
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "RemoveAsync failed");
+            return false;
         }
     }
 
@@ -208,8 +288,16 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                     if (now - kv.Value > timeout)
                     {
                         if (_data.TryRemove(kv.Key, out var stale))
+                        {
+                            if (_removeHandlers.TryGetValue(kv.Key.DataName, out var handler))
+                            {
+                                try { await handler.HandleAsync(stale); }
+                                catch (Exception ex) { PubSubLog.Error(ex, "CleanupLoop OnRemove failed"); }
+                            }
+
                             if (stale is IPlayerDataInternal di)
                                 di.SetOnline(false);
+                        }
                         _lastActiveTicks.TryRemove(kv.Key, out _);
                     }
                 }
@@ -251,6 +339,33 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                 catch (Exception ex) { PubSubLog.Error(ex, "OnDefault callback failed"); }
             }
             return data;
+        }
+    }
+
+    private interface IRemovalHandler
+    {
+        string DataName { get; }
+        Task HandleAsync(IPlayerData data);
+    }
+
+    private sealed class RemovalHandler<T> : IRemovalHandler where T : class, IPlayerData
+    {
+        private readonly Func<T, Task>? _callback;
+        public string DataName { get; }
+
+        public RemovalHandler(string dataName, Func<T, Task>? callback)
+        {
+            DataName = dataName;
+            _callback = callback;
+        }
+
+        public async Task HandleAsync(IPlayerData data)
+        {
+            if (_callback != null && data is T typed)
+            {
+                try { await _callback(typed); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnRemove callback failed"); }
+            }
         }
     }
 
