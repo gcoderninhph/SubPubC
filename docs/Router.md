@@ -8,6 +8,10 @@ Package cầu nối giữa game client (kết nối TCP qua MyConnection) và Pu
 - [Cài đặt](#cài-đặt)
 - [Kiến trúc](#kiến-trúc)
 - [API Reference](#api-reference)
+  - [IPubSubRouterModule](#ipubsubroutermodule)
+  - [IPubSubNatifyClient](#ipubsubnatifyclient)
+  - [IPlayerSpeaksRouterModule](#iplayerspeaksroutermodule)
+  - [IPlayerSpeaksNatifyClient](#iplayerspeaksnatifyclient)
 - [Cách dùng](#cách-dùng)
 - [Luồng xử lý nội bộ](#luồng-xử-lý-nội-bộ)
   - [Client connect](#1-client-connect)
@@ -23,12 +27,13 @@ Package cầu nối giữa game client (kết nối TCP qua MyConnection) và Pu
 Game Client ◄── TCP (MyConnection) ──► Router ◄── NATS ──► PubSub Server
 ```
 
-Router làm 2 nhiệm vụ chính:
+Router làm 3 nhiệm vụ chính:
 
 | Hướng | Nhiệm vụ |
 |-------|----------|
-| **Client → Server** | Nhận `PubSub.Cmd` từ client qua UDP → gán `watcherId` từ connection → forward lên NATS topic `PubSub.Cmd` |
-| **Server → Client** | Nhận `PubSub.Evt` từ NATS → demux (phân phối) đến đúng client TCP dựa trên `watcherId` trong message |
+| **Client → Server** | Nhận `PubSub.Cmd` và `PlayerSpeaks.Msg` từ client qua TCP/UDP → gán `watcherId`/`playerId` từ connection → forward lên NATS |
+| **Server → Client** | Nhận `PubSub.Evt` và `PlayerSpeaks.Msg` từ NATS → demux (phân phối) đến đúng client TCP dựa trên `watcherId`/`playerId` trong message |
+| **Player Speak** | Theo dõi online/offline status của player → publish `PlayerOnlineStatusMsg` qua NATS khi client connect/disconnect |
 
 Router **không** chứa logic game. Nó chỉ là cầu nối — map connection ↔ watcherId và forward dữ liệu.
 
@@ -288,6 +293,90 @@ NATS PubSub.Evt ──────► IPubSubNatifyClient callbacks
 - `BatchEnter`/`BatchLeave`: message chứa `repeated watcher_ids` — duyệt từng watcherId, tìm connection, gửi qua **TCP**
 - `UnitEvent`: message chứa `repeated watcher_ids`. Nếu `msg.UseUdp == true` → gửi qua **UDP** (best-effort), ngược lại gửi qua **TCP** (reliable)
 - `SyncEnter`/`SyncLeave`: message chứa 1 `watcherId` duy nhất — gửi trực tiếp qua **TCP**
+
+---
+
+### IPlayerSpeaksRouterModule
+
+Module quản lý player speak — theo dõi kết nối client và đồng bộ trạng thái online/offline với server qua NATS.
+
+```csharp
+public interface IPlayerSpeaksRouterModule : IServerModule
+{
+    static IPlayerSpeaksRouterModule Create(NatifyServer server, string regionId);
+}
+```
+
+Kế thừa `IServerModule` từ MyConnection — tự động tích hợp vào vòng đời server.
+
+| Tham số | Mô tả |
+|---------|-------|
+| `server` | `NatifyServer` — kết nối NATS |
+| `regionId` | Region identifier (vd: `"VN"`) — prefix cho NATS subject |
+
+**Luồng hoạt động:**
+
+```
+Client ── TCP connect ──► MyConnection Server
+                            │
+                            ▼ OnConnect callback
+                        PlayerSpeaksRouterModule
+                            │
+                            ├─ Parse playerId = long.Parse(conn.User.Id)
+                            ├─ _connections[playerId] = conn
+                            └─ _natifyClient.SendOnlineStatus(new PlayerOnlineStatusMsg
+                                {
+                                    PlayerId = playerId,
+                                    IsOnline = true
+                                })
+                                │
+                                ▼ NATS PlayerSpeaks.Msg ──► PubSub Server
+                                                              │
+                                                              ▼ PlayerSpeaksManager
+                                                              SetOnline(playerId, true)
+                                                              → Nếu có dữ liệu, Commit("init")
+
+Client ── TCP disconnect ──►
+                            ▼ OnDisconnect callback
+                        PlayerSpeaksRouterModule
+                            │
+                            ├─ _connections.TryRemove(playerId, out _)
+                            └─ _natifyClient.SendOnlineStatus(new PlayerOnlineStatusMsg
+                                {
+                                    PlayerId = playerId,
+                                    IsOnline = false
+                                })
+                                │
+                                ▼ NATS PlayerSpeaks.Msg ──► PubSub Server
+                                                              │
+                                                              ▼ PlayerSpeaksManager
+                                                              SetOnline(playerId, false)
+                                                              → CleanupLoop bắt đầu đếm timeout
+```
+
+### IPlayerSpeaksNatifyClient
+
+Interface nội bộ dùng để giao tiếp NATS cho player speaks:
+
+```csharp
+public interface IPlayerSpeaksNatifyClient : IDisposable
+{
+    static IPlayerSpeaksNatifyClient Create(NatifyServer server, string regionId);
+
+    void SendOnlineStatus(PlayerOnlineStatusMsg msg);               // Gửi trạng thái online/offline
+
+    void OnPlayerSpeaks(Action<PlayerSpeaksEvent> callback);        // Nhận event từ server → forward đến client
+    void OnMirrorMessage(Action<MirrorMessageEvent> callback);     // Nhận mirror message từ client → forward đến server
+    void SendClientMsg(ClientMirrorMessage msg);                    // Gửi message từ client lên server
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `SendOnlineStatus(msg)` | Publish `PlayerOnlineStatusMsg` lên NATS khi client connect/disconnect |
+| `OnPlayerSpeaks(callback)` | Subscribe NATS event từ server (data update, commit) → forward TCP đến client |
+| `OnMirrorMessage(callback)` | Subscribe NATS mirror message từ client → forward đến server |
+| `SendClientMsg(msg)` | Gửi `ClientMirrorMessage` từ client lên NATS để server xử lý |
 
 ---
 

@@ -11,7 +11,10 @@ Package chứa toàn bộ logic không gian (spatial grid), quản lý Unit/Watc
   - [IPubSub](#ipubsub)
   - [IUnit](#iunit)
   - [UnitKey](#unitkey)
+  - [PlayerSpeakerConfig](#playerspeakerconfig)
+  - [IPlayerData](#iplayerdata)
   - [IPlayerSpeaksManager](#iplayerspeaksmanager)
+  - [PubSubLog](#pubsublog)
 - [3 chế độ sử dụng](#3-chế-độ-sử-dụng)
   - [Standalone (không Natify)](#1-standalone-không-natify)
   - [Networked (có Natify)](#2-networked-có-natify)
@@ -186,29 +189,85 @@ Dùng trong `SyncLeave` callback và nội bộ `WatcherPingUnits` để định
 
 ---
 
+### IPlayerData
+
+Contract cho dữ liệu player. Mỗi type implement `IPlayerData` được quản lý riêng biệt bởi `IPlayerSpeaksManager`, keyed by `(DataName, PlayerId)`.
+
+```csharp
+public interface IPlayerData
+{
+    long PlayerId { get; }          // ID của player sở hữu dữ liệu
+    bool IsOnLine { get; }          // true nếu player đang online (được set bởi manager)
+    string DataName { get; }        // Tên duy nhất của loại dữ liệu (vd: "PlayerProfile")
+
+    void OnChange(Action<byte[], string> handler);   // Đăng ký callback khi dữ liệu thay đổi (data, commit)
+    void OnMessage(Action<string, byte[]> handler);  // Đăng ký callback khi nhận message từ server (subject, data)
+    void Commit(string commit);                      // Gửi commit thay đổi dữ liệu đến client
+}
+```
+
+| Member | Mô tả |
+|--------|-------|
+| `PlayerId` | ID của player sở hữu dữ liệu này |
+| `IsOnLine` | `true` khi player đang kết nối đến router |
+| `DataName` | String key phân biệt các loại dữ liệu khác nhau của cùng 1 player |
+| `OnChange(handler)` | Đăng ký handler nhận `(byte[] data, string commit)` mỗi khi dữ liệu thay đổi |
+| `OnMessage(handler)` | Đăng ký handler nhận `(string subject, byte[] data)` khi server gửi message đến player |
+| `Commit(commit)` | Gửi commit message đến client — client nhận qua `IPlayerMirrorClient.ApplyUpdate()` |
+
+`IPlayerDataInternal` (internal) extends `IPlayerData` với các phương thức chỉ dùng bởi manager:
+- `SetOnline(bool)` — cập nhật trạng thái online
+- `SetPlayerId(long)` — gán playerId (khi tạo lần đầu)
+- `PrepareMessageDispatch(subject, data)` — chuẩn bị dispatch message đến handler `OnMessage`
+
+### PlayerSpeakerConfig
+
+```csharp
+public class PlayerSpeakerConfig
+{
+    public int PlayerTimeoutSeconds = 5;          // Timeout xóa dữ liệu player khi offline
+    public int PlayerCleanupIntervalSeconds = 2;   // Tần suất cleanup loop kiểm tra timeout
+    public NatifyClientFast? ClientFast = null;    // Natify client (fast path)
+    public NatifyClient? Client = null;            // Natify client (standard path)
+}
+```
+
+| Field | Default | Mô tả |
+|-------|---------|-------|
+| `PlayerTimeoutSeconds` | 5 | Sau khi player offline, dữ liệu tồn tại thêm N giây rồi tự động bị xóa bởi `CleanupLoop` |
+| `PlayerCleanupIntervalSeconds` | 2 | Tần suất kiểm tra player timeout trong `Tick()` |
+| `ClientFast` / `Client` | null | Natify client để giao tiếp NATS — cần ít nhất 1 trong 2 để networked mode hoạt động |
+
 ### IPlayerSpeaksManager
 
 Quản lý dữ liệu cho từng player (đối tượng `IPlayerData`) gắn với `playerId`. Dữ liệu tồn tại xuyên suốt phiên — được tạo từ trước khi client connect, và không bị xóa khi client disconnect.
 
 ```csharp
-public interface IPlayerSpeaksManager
+public interface IPlayerSpeaksManager : IDisposable
 {
+    static IPlayerSpeaksManager Create(PlayerSpeakerConfig config);
+
     // ── Data lifecycle ──
     T CreateData<T>(long playerId) where T : class, IPlayerData, new();
-    Task<bool> RemoveAsync(long playerId);
     T? GetData<T>(long playerId) where T : class, IPlayerData, new();
+    Task<bool> RemoveAsync(long playerId);
+
+    // ── Main loop ──
+    void Tick();
 
     // ── Lifecycle hooks ──
-    void OnDefault<T>(Func<T, Task>? handler) where T : class, IPlayerData, new();
-    void OnRemove<T>(Func<T, Task>? handler) where T : class, IPlayerData, new();
+    void OnDefault<T>(Func<T, Task>? callback) where T : class, IPlayerData, new();
+    void OnRemove<T>(Func<T, Task>? callback) where T : class, IPlayerData, new();
 }
 ```
 
 | Phương thức | Mô tả |
 |-------------|-------|
+| `Create(config)` | Static factory — tạo instance từ `PlayerSpeakerConfig` |
 | `CreateData<T>(playerId)` | Tạo hoặc lấy dữ liệu hiện có cho player. Gọi `OnDefault<T>` nếu là lần đầu tạo. |
 | `RemoveAsync(playerId)` | Xóa toàn bộ dữ liệu của player. Trả về `true` nếu xóa thành công, `false` nếu player đang online hoặc không có dữ liệu. Gọi `OnRemove<T>` trước khi xóa. |
 | `GetData<T>(playerId)` | Lấy dữ liệu theo type. Trả về `null` nếu không có. |
+| `Tick()` | Gọi định kỳ (vd: mỗi frame). Xử lý message queue từ NATS, chạy `CleanupLoop` kiểm tra player timeout. |
 | `OnDefault<T>(handler)` | Đăng ký callback chạy khi `CreateData<T>` tạo dữ liệu lần đầu. Handler nhận instance `T` vừa tạo. |
 | `OnRemove<T>(handler)` | Đăng ký callback chạy TRƯỚC KHI dữ liệu bị xóa (qua `RemoveAsync` hoặc `CleanupLoop` timeout). Handler nhận instance `T` để xử lý cuối (save state, log, v.v.). |
 
@@ -233,7 +292,13 @@ Player online status được theo dõi qua `_playerStates: Dictionary<long, Pla
 **Ví dụ:**
 
 ```csharp
-var manager = new PlayerSpeaksManager(natifyServer, region: "VN");
+var config = new PlayerSpeakerConfig
+{
+    ClientFast = natifyClientFast,  // Natify client để giao tiếp NATS
+    PlayerTimeoutSeconds = 5,
+    PlayerCleanupIntervalSeconds = 2
+};
+var manager = IPlayerSpeaksManager.Create(config);
 
 // Đăng ký handler cho dữ liệu mặc định
 manager.OnDefault<PlayerProfile>(async profile =>
@@ -252,6 +317,9 @@ manager.OnRemove<PlayerProfile>(async profile =>
 // Tạo dữ liệu
 var profile = manager.CreateData<PlayerProfile>(playerId: 42);
 
+// Gọi Tick() định kỳ (mỗi frame hoặc mỗi giây)
+manager.Tick();
+
 // Khi player offline, xóa dữ liệu
 var removed = await manager.RemoveAsync(42);
 // removed == true → dữ liệu đã bị xóa, OnRemove đã chạy
@@ -260,16 +328,30 @@ var removed = await manager.RemoveAsync(42);
 var check = manager.GetData<PlayerProfile>(42); // null
 ```
 
-### SendMessage / OnMessage (real-time messaging)
+### PubSubLog
 
-Server có thể gửi message real-time đến client qua NATS + TCP.
+Static logger class tập trung — mọi exception trong worker thread, callback, và network đều được log qua đây. Hỗ trợ try-catch hardening trên toàn bộ hệ thống.
 
 ```csharp
-// Server gửi
-manager.SendMessage(playerId, "Welcome", data);
+public static class PubSubLog
+{
+    public static Action<string>? Info { get; set; }
+    public static Action<string>? Warning { get; set; }
+    public static Action<string>? Error { get; set; }
+}
+```
 
-// Router forward qua TCP topic "PubSub.Msg"
-// Client nhận qua OnMessage callback
+| Member | Mô tả |
+|--------|-------|
+| `Info` | Set action để nhận log info (kết nối, trạng thái) |
+| `Warning` | Set action để nhận warning (timeout, retry) |
+| `Error` | Set action để nhận error (exception trong callback, network lỗi) |
+
+```csharp
+// Setup logging
+PubSubLog.Info = msg => Console.WriteLine($"[INFO] {msg}");
+PubSubLog.Warning = msg => Console.WriteLine($"[WARN] {msg}");
+PubSubLog.Error = msg => Console.WriteLine($"[ERROR] {msg}");
 ```
 
 ---

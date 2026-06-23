@@ -1,6 +1,6 @@
 # Client — PubSubLib.Client
 
-Package chạy trong game client (Unity / .NET). Tự động ping định kỳ để đồng bộ trạng thái với PubSub server, nhận event để tạo/hủy GameObject. Là một `IClientModule` cắm vào MyConnection client.
+Package chạy trong game client (Unity / .NET). Tự động ping định kỳ để đồng bộ trạng thái với PubSub server, nhận event để tạo/hủy GameObject. Đồng bộ dữ liệu player (mirror) qua NATS. Là một `IClientModule` cắm vào MyConnection client.
 
 ## Mục lục
 
@@ -8,12 +8,23 @@ Package chạy trong game client (Unity / .NET). Tự động ping định kỳ 
 - [Cài đặt](#cài-đặt)
 - [Kiến trúc](#kiến-trúc)
 - [API Reference](#api-reference)
+  - [IPubSubClient](#ipubsubclient)
+  - [IUnit / IUnit\<T\>](#iunit--iunitt)
+  - [IPubSubClientModule](#ipubsubclientmodule)
+  - [IProvider / IProvider\<T\>](#iprovider--iprovidert)
+  - [ProviderAbstract\<T\>](#providerabstractt)
+  - [EventMeta](#eventmeta)
+  - [Config](#config)
+  - [IPlayerMirrorClient](#iplayermirrorclient)
+  - [IPlayerSpeaksClient](#iplayerspeaksclient)
+  - [IPlayerSpeaksClientModule](#iplayerspeaksclientmodule)
 - [Cách dùng](#cách-dùng)
 - [Luồng xử lý nội bộ](#luồng-xử-lý-nội-bộ)
   - [Tick / Ping cycle](#1-tick--ping-cycle)
   - [Nhận event từ server](#2-nhận-event-từ-server)
   - [MoveWatcher](#3-movewatcher)
   - [Unit tracking với IAlive](#4-unit-tracking-với-ialive)
+  - [Player data sync](#5-player-data-sync)
 
 ---
 
@@ -23,12 +34,13 @@ Package chạy trong game client (Unity / .NET). Tự động ping định kỳ 
 Game Client (PubSubLib.Client) ◄── TCP ──► Router ◄── NATS ──► PubSub Server
 ```
 
-Client làm 2 nhiệm vụ:
+Client làm 3 nhiệm vụ:
 
 | Nhiệm vụ | Cơ chế |
 |----------|--------|
 | **Đồng bộ trạng thái** | `Tick()` định kỳ build `PingUnitsCmd` với version map → gửi UDP `PubSub.Cmd` |
 | **Nhận event** | Subscribe TCP `PubSub.Evt` → `HandleBatchEnter`/`HandleSyncEnter`/`HandleBatchLeave`/`HandleSyncLeave` → gọi `IProvider` tạo/hủy GameObject |
+| **Đồng bộ dữ liệu player** | `IPlayerSpeaksClientModule` subscribe TCP `PlayerSpeaks.Msg` → mirror dữ liệu từ server xuống client qua `IPlayerMirrorClient` |
 
 Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí do server authoritative quyết định và gửi về qua event.
 
@@ -262,6 +274,125 @@ public class Config
 | Param | Default | Mô tả |
 |-------|---------|-------|
 | `PingIntervalMs` | 1000 | Tần suất ping (ms). `Tick()` chỉ gửi ping khi thời gian từ lần ping trước ≥ giá trị này. |
+
+### IPlayerMirrorClient
+
+Contract cho dữ liệu player được mirror từ server xuống client. Mỗi type implement `IPlayerMirrorClient` tương ứng với 1 `IPlayerData` trên server — client tự động nhận cập nhật khi server thay đổi.
+
+```csharp
+namespace PubSubLib.Mirror;
+
+public interface IPlayerMirrorClient
+{
+    long PlayerId { get; set; }                         // ID của player sở hữu dữ liệu
+    string DataName { get; }                            // Tên duy nhất khớp với IPlayerData.DataName
+
+    void ApplyUpdate(byte[] data, string commit);       // Nhận cập nhật dữ liệu từ server
+    void DispatchMessage(string subject, byte[] data);  // Nhận message từ server
+    void OnSendMessage(Action<string, long, byte[]> handler); // Đăng ký handler gửi message lên server
+}
+```
+
+| Member | Mô tả |
+|--------|-------|
+| `PlayerId` | ID của player. Được set tự động bởi module khi nhận dữ liệu từ server. |
+| `DataName` | String key khớp với `IPlayerData.DataName` trên server — dùng để route dữ liệu đúng type. |
+| `ApplyUpdate(data, commit)` | Được gọi khi server `Commit()` dữ liệu — client nhận `(byte[] data, string commit)` và áp dụng thay đổi. |
+| `DispatchMessage(subject, data)` | Được gọi khi server gửi message đến player (qua `IPlayerData.OnMessage`). |
+| `OnSendMessage(handler)` | Đăng ký handler `(string subject, long playerId, byte[] data)` để gửi message từ client lên server. |
+
+**Ví dụ implement:**
+
+```csharp
+[MirrorProtoClient(typeof(PlayerProfileMsg))]
+public class PlayerProfileClient : IPlayerMirrorClient
+{
+    public long PlayerId { get; set; }
+    public string DataName => "PlayerProfile";
+
+    public int Level { get; set; }
+    public int Gold { get; set; }
+
+    public void ApplyUpdate(byte[] data, string commit)
+    {
+        // Deserialize data và áp dụng
+        var msg = PlayerProfileMsg.Parser.ParseFrom(data);
+        Level = msg.Level;
+        Gold = msg.Gold;
+    }
+
+    public void DispatchMessage(string subject, byte[] data)
+    {
+        // Xử lý message từ server (vd: "Welcome", "Notification")
+    }
+
+    public void OnSendMessage(Action<string, long, byte[]> handler)
+    {
+        // Handler sẽ được gọi khi client muốn gửi message lên server
+    }
+}
+```
+
+### IPlayerSpeaksClient
+
+Quản lý các `IPlayerMirrorClient` instance trên client side. Tự động subscribe/unsubscribe từ server khi `AddData<T>()`/`RemoveData<T>()`.
+
+```csharp
+public interface IPlayerSpeaksClient : IDisposable
+{
+    void AddData<T>() where T : class, IPlayerMirrorClient, new();
+    T? GetData<T>() where T : class, IPlayerMirrorClient;
+    void RemoveData<T>() where T : class, IPlayerMirrorClient;
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `AddData<T>()` | Đăng ký type `T` để nhận mirror từ server. Module tự động tạo instance, subscribe TCP topic, và gọi `ApplyUpdate`/`DispatchMessage` khi có dữ liệu. |
+| `GetData<T>()` | Lấy instance mirror hiện tại. Trả về `null` nếu chưa được `AddData` hoặc chưa nhận dữ liệu từ server. |
+| `RemoveData<T>()` | Hủy đăng ký type `T` — ngừng nhận mirror, xóa instance. |
+| `Dispose()` | Dọn dẹp tất cả mirror, unsubscribe TCP. |
+
+### IPlayerSpeaksClientModule
+
+Module cắm vào MyConnection client để quản lý kết nối player speaks.
+
+```csharp
+public interface IPlayerSpeaksClientModule : IClientModule, IDisposable
+{
+    static IPlayerSpeaksClientModule Create();
+    IPlayerSpeaksClient Get();
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `Create()` | Static factory — tạo module mới |
+| `Get()` | Lấy `IPlayerSpeaksClient` để gọi `AddData<T>()`, `GetData<T>()`, `RemoveData<T>()` |
+
+**Ví dụ sử dụng:**
+
+```csharp
+// Tạo module
+var playerSpeaksModule = IPlayerSpeaksClientModule.Create();
+var playerSpeaks = playerSpeaksModule.Get();
+
+// Đăng ký nhận mirror dữ liệu PlayerProfile từ server
+playerSpeaks.AddData<PlayerProfileClient>();
+
+// Sau khi connect và nhận dữ liệu từ server:
+var profile = playerSpeaks.GetData<PlayerProfileClient>();
+if (profile != null)
+{
+    Console.WriteLine($"Level: {profile.Level}, Gold: {profile.Gold}");
+}
+
+// Khi không cần nữa:
+playerSpeaks.RemoveData<PlayerProfileClient>();
+
+// Gắn module vào client
+client.AddModule(playerSpeaksModule);
+```
 
 ---
 
@@ -503,6 +634,51 @@ Vòng đời:
 - Target phải set `IsAlive = false` khi không còn dùng (vd: `DestroyObject` gọi `obj.IsAlive = false`)
 - Lần `Tick()` tiếp theo, `CleanDeadUnits` phát hiện và dọn dẹp
 - Server sẽ nhận ping thiếu unit → `SyncLeave` (nếu unit thực sự không còn trên server) hoặc `SyncEnter` (re-sync nếu unit vẫn còn)
+
+### 5. Player data sync
+
+```
+Server IPlayerData.Commit("update")
+  │
+  ▼ NATS PlayerSpeaks.Msg ──────► Router
+                                    │
+                                    ▼ Forward TCP "PlayerSpeaks.Msg" ──► Client
+                                                                          │
+                                                                          ▼ PlayerSpeaksClientModule.OnMessage()
+                                                                          ├─ Parse MirrorMessageEvent
+                                                                          ├─ Tìm IPlayerMirrorClient theo DataName
+                                                                          └─ client.ApplyUpdate(data, commit)
+
+Server gửi message qua IPlayerData.OnMessage
+  │
+  ▼ NATS PlayerSpeaks.Msg ──────► Router
+                                    │
+                                    ▼ Forward TCP "PlayerSpeaks.Msg" ──► Client
+                                                                          │
+                                                                          ▼ PlayerSpeaksClientModule
+                                                                          └─ client.DispatchMessage(subject, data)
+
+Client gửi message lên server:
+  │
+  ▼ IPlayerMirrorClient.OnSendMessage(handler)
+  └─ handler(subject, playerId, data)
+      │
+      ▼ TCP "PlayerSpeaks.Msg" ──► Router
+                                    │
+                                    ▼ NATS PlayerSpeaks.Msg ──► Server
+                                                                  │
+                                                                  ▼ PlayerSpeaksManager
+                                                                  └─ IPlayerData.OnMessage handler
+```
+
+**Luồng hoàn chỉnh:**
+1. Server tạo `IPlayerData` qua `manager.CreateData<T>(playerId)`
+2. Client đăng ký mirror type qua `playerSpeaks.AddData<T>()`
+3. Khi player connect → Router gửi `PlayerOnlineStatusMsg(IsOnline=true)` → Server set `IsOnLine = true`
+4. Server `Commit("init")` → dữ liệu serialize → NATS → Router → TCP → Client `ApplyUpdate(data, "init")`
+5. Khi dữ liệu thay đổi, server `Commit("update")` → client nhận `ApplyUpdate` với commit message
+6. Khi player disconnect → Router gửi `PlayerOnlineStatusMsg(IsOnline=false)` → Server set `IsOnLine = false`
+7. Sau `PlayerTimeoutSeconds`, `CleanupLoop` gọi `OnRemove<T>` rồi xóa dữ liệu
 
 ---
 
