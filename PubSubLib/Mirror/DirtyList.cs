@@ -29,7 +29,8 @@ namespace PubSubLib.Mirror
 
         public DirtyList(IEnumerable<T> items, System.Action? onDirty)
         {
-            _list.AddRange(items);
+            if (items != null)
+                _list.AddRange(items);
             _onDirty = onDirty;
         }
 

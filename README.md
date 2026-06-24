@@ -308,10 +308,11 @@ SubPubC.sln
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib" Version="1.51.1" />              <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.8.1" />       <!-- Game client -->
-<PackageReference Include="PubSubLib.Router" Version="1.4.1" />       <!-- NATS bridge -->
-<PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />    <!-- Protobuf messages -->
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.8" />  <!-- Source generator -->
+<PackageReference Include="PubSubLib" Version="1.51.5" />                    <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="1.8.5" />             <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="1.4.1" />             <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />          <!-- Protobuf messages -->
 ```
 
 ## Build & Test

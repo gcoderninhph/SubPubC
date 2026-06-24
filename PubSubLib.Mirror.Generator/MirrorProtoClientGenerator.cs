@@ -154,7 +154,9 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             }
             foreach (var pa in sg.PrimitiveArrayFields)
             {
-                sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
+                var bf = "_" + char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                sb.AppendLine($"        private readonly System.Collections.Generic.List<{pa.ElementType}> {bf} = new();");
+                sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<{pa.ElementType}> {pa.FieldName} => {bf};");
             }
             sb.AppendLine();
             var ctorArgs = new List<string>();
@@ -171,7 +173,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             foreach (var pa in sg.PrimitiveArrayFields)
             {
                 var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
-                ctorArgs.Add($"{pa.ElementType}[] {argName}");
+                ctorArgs.Add($"System.Collections.Generic.IReadOnlyList<{pa.ElementType}> {argName}");
             }
             sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
             sb.AppendLine("        {");
@@ -195,8 +197,9 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             }
             foreach (var pa in sg.PrimitiveArrayFields)
             {
+                var bf = "_" + char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
                 var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
-                sb.AppendLine($"            {pa.FieldName} = {argName};");
+                sb.AppendLine($"            {bf} = new System.Collections.Generic.List<{pa.ElementType}>({argName});");
             }
             sb.AppendLine("        }");
             sb.AppendLine("    }");

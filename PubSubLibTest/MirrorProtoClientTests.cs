@@ -585,8 +585,8 @@ public class MirrorProtoClientTests
         var p = mirror.Players[0];
         Assert.Equal(1L, p.Id);
         Assert.Equal("ninh", p.Name);
-        Assert.Equal(new long[] { 10, 20 }, p.Bean);
-        Assert.Equal(new float[] { 0.5f, 1.0f }, p.Scores);
+        Assert.Equal(new long[] { 10, 20 }, p.Bean.ToArray());
+        Assert.Equal(new float[] { 0.5f, 1.0f }, p.Scores.ToArray());
     }
 
     [Fact]
@@ -607,11 +607,11 @@ public class MirrorProtoClientTests
 
         Assert.Equal(2, mirror.Players.Count);
         var p0 = mirror.Players[0];
-        Assert.Equal(new long[] { 1 }, p0.Bean);
-        Assert.Equal(new float[] { 0.1f }, p0.Scores);
+        Assert.Equal(new long[] { 1 }, p0.Bean.ToArray());
+        Assert.Equal(new float[] { 0.1f }, p0.Scores.ToArray());
         var p1 = mirror.Players[1];
-        Assert.Equal(new long[] { 2, 3 }, p1.Bean);
-        Assert.Equal(new float[] { 0.2f, 0.3f }, p1.Scores);
+        Assert.Equal(new long[] { 2, 3 }, p1.Bean.ToArray());
+        Assert.Equal(new float[] { 0.2f, 0.3f }, p1.Scores.ToArray());
     }
 
     [Fact]
@@ -662,8 +662,8 @@ public class MirrorProtoClientTests
         var p = mirror.Players[0];
         Assert.Equal(2L, p.Id);
         Assert.Equal("second", p.Name);
-        Assert.Equal(new long[] { 3, 4, 5 }, p.Bean);
-        Assert.Equal(new float[] { 0.2f, 0.3f }, p.Scores);
+        Assert.Equal(new long[] { 3, 4, 5 }, p.Bean.ToArray());
+        Assert.Equal(new float[] { 0.2f, 0.3f }, p.Scores.ToArray());
     }
 
     [Fact]

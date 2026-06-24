@@ -658,6 +658,81 @@ public class MirrorProtoTests
     }
 
     [Fact]
+    public void PrimitiveArray_ChangeElement_MarksListDirty()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", [10, 20], [0.5f]));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Bean[0] = 99;
+        Assert.True(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void PrimitiveArray_ChangeElement_Commit_SendsUpdatedValue()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", new long[] { 10, 20 }, new float[] { 0.5f }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+
+        mirror.Players[0].Bean[0] = 99;
+
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+        mirror.Commit("update");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = PrimitiveArrayStructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new long[] { 99, 20 }, parsed.StructXPlayerXBeanArrayValue);
+        Assert.Equal(new int[] { 2 }, parsed.StructXPlayerXBeanArrayCount);
+    }
+
+    [Fact]
+    public void PrimitiveArray_SameValue_DoesNotMarkDirty()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", new long[] { 10, 20 }, new float[] { 0.5f }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Bean[0] = 10;
+        Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void PrimitiveArray_AddElement_MarksListDirty()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", new long[] { 10 }, new float[] { 0.5f }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Bean.Add(99);
+        Assert.True(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void PrimitiveArrayStruct_ChangeArrayElement_MarksListDirty()
+    {
+        var mirror = new PrimitiveArrayStructTestMirror();
+        mirror.Players.Add(new PrimitiveArrayStructTestMirror.Player(1, "ninh", new long[] { 10, 20 }, new float[] { 0.5f }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        var p = mirror.Players[0];
+        p.Bean[0] = 99;
+        Assert.True(mirror.Players.IsDirty);
+        mirror.Players[0] = p;
+    }
+
+    [Fact]
     public void ClassGroup_Add_MarksListDirty()
     {
         var mirror = new ClassTestMirror();
