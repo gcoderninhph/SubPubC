@@ -203,6 +203,16 @@ message PrimitiveArrayStructTestMsg {
 
 // ===== Mirror SendMessage Test =====
 
+// ===== Mirror Class Test =====
+
+message ClassTestMsg {
+    repeated int64 class_x_player_x_id = 1;
+    repeated string class_x_player_x_name = 2;
+    int32 version = 3;
+}
+
+// ===== Mirror SendMessage Test =====
+
 message ChatMsg {
     string text = 1;
 }

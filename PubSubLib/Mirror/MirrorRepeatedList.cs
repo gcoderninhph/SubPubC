@@ -23,6 +23,8 @@ public class MirrorRepeatedList<T> : IList<T>
             {
                 _list[index] = value;
                 _isDirty = true;
+                if (value is IMirrorListItemDirtyProxy proxy)
+                    proxy.SetDirtyMarker(MarkDirty);
             }
         }
     }
@@ -31,6 +33,11 @@ public class MirrorRepeatedList<T> : IList<T>
     {
         get { lock (_lock) return _isDirty; }
         private set { lock (_lock) _isDirty = value; }
+    }
+
+    public void MarkDirty()
+    {
+        lock (_lock) _isDirty = true;
     }
 
     public void ClearDirty()
@@ -59,6 +66,8 @@ public class MirrorRepeatedList<T> : IList<T>
         {
             _list.Add(item);
             _isDirty = true;
+            if (item is IMirrorListItemDirtyProxy proxy)
+                proxy.SetDirtyMarker(MarkDirty);
         }
     }
 
@@ -66,6 +75,11 @@ public class MirrorRepeatedList<T> : IList<T>
     {
         lock (_lock)
         {
+            foreach (var item in _list)
+            {
+                if (item is IMirrorListItemDirtyProxy proxy)
+                    proxy.SetDirtyMarker(null);
+            }
             _list.Clear();
             _isDirty = true;
         }
@@ -92,6 +106,8 @@ public class MirrorRepeatedList<T> : IList<T>
         {
             _list.Insert(index, item);
             _isDirty = true;
+            if (item is IMirrorListItemDirtyProxy proxy)
+                proxy.SetDirtyMarker(MarkDirty);
         }
     }
 
@@ -102,6 +118,8 @@ public class MirrorRepeatedList<T> : IList<T>
             if (_list.Remove(item))
             {
                 _isDirty = true;
+                if (item is IMirrorListItemDirtyProxy proxy)
+                    proxy.SetDirtyMarker(null);
                 return true;
             }
             return false;
@@ -112,8 +130,11 @@ public class MirrorRepeatedList<T> : IList<T>
     {
         lock (_lock)
         {
+            var item = _list[index];
             _list.RemoveAt(index);
             _isDirty = true;
+            if (item is IMirrorListItemDirtyProxy proxy)
+                proxy.SetDirtyMarker(null);
         }
     }
 

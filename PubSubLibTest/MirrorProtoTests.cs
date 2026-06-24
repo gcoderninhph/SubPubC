@@ -657,6 +657,153 @@ public class MirrorProtoTests
         Assert.False(list.IsDirty);
     }
 
+    [Fact]
+    public void ClassGroup_Add_MarksListDirty()
+    {
+        var mirror = new ClassTestMirror();
+        var list = mirror.Players;
+        Assert.False(list.IsDirty);
+
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        Assert.True(list.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangeProperty_MarksListDirty()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Name = "changed";
+        Assert.True(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangePropertySameValue_DoesNotMarkDirty()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Name = "ninh";
+        Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_AddItem_Commit_SendsData()
+    {
+        var mirror = new ClassTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Commit("add");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = ClassTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1 }, parsed.ClassXPlayerXId);
+        Assert.Equal(new string[] { "ninh" }, parsed.ClassXPlayerXName);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangeProperty_Commit_SendsUpdatedValue()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+
+        mirror.Players[0].Id = 99;
+        mirror.Players[0].Name = "updated";
+
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+        mirror.Commit("update");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = ClassTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 99 }, parsed.ClassXPlayerXId);
+        Assert.Equal(new string[] { "updated" }, parsed.ClassXPlayerXName);
+    }
+
+    [Fact]
+    public void ClassGroup_DirtyFlag_ResetsAfterCommit()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        Assert.True(mirror.Players.IsDirty);
+
+        mirror.Commit("test");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_MultipleItems_Commit()
+    {
+        var mirror = new ClassTestMirror();
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(2, "yen"));
+        mirror.Players.Add(new ClassTestMirror.Player(3, "bao"));
+        mirror.Commit("multi");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = ClassTestMsg.Parser.ParseFrom(data);
+        Assert.Equal(new long[] { 1, 2, 3 }, parsed.ClassXPlayerXId);
+        Assert.Equal(new string[] { "ninh", "yen", "bao" }, parsed.ClassXPlayerXName);
+    }
+
+    [Fact]
+    public void ClassGroup_Remove_DetachesDirtyMarker()
+    {
+        var mirror = new ClassTestMirror();
+        var player = new ClassTestMirror.Player(1, "ninh");
+        mirror.Players.Add(player);
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players.Remove(player);
+        mirror.Commit("remove");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        player.Name = "after_remove";
+        Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_Clear_DetachesAllDirtyMarkers()
+    {
+        var mirror = new ClassTestMirror();
+        var p1 = new ClassTestMirror.Player(1, "ninh");
+        var p2 = new ClassTestMirror.Player(2, "yen");
+        mirror.Players.Add(p1);
+        mirror.Players.Add(p2);
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+
+        mirror.Players.Clear();
+        mirror.Commit("clear");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        p1.Name = "after_clear";
+        p2.Name = "after_clear";
+        Assert.False(mirror.Players.IsDirty);
+    }
+
 }
 
 [MirrorProto(typeof(RemoveWatcherCmd), DataName = "MyCustomName")]
@@ -696,5 +843,10 @@ public partial class MirrorSendTestMirror
 
 [MirrorProto(typeof(PrimitiveArrayStructTestMsg))]
 public partial class PrimitiveArrayStructTestMirror
+{
+}
+
+[MirrorProto(typeof(ClassTestMsg))]
+public partial class ClassTestMirror
 {
 }

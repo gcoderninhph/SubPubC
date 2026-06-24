@@ -132,7 +132,8 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         foreach (var sg in info.StructGroups)
         {
             sb.AppendLine();
-            sb.AppendLine($"    public struct {sg.StructName}");
+            var typeKeyword = sg.IsClass ? "class" : "struct";
+            sb.AppendLine($"    public {typeKeyword} {sg.StructName}");
             sb.AppendLine("    {");
             for (int i = 0; i < sg.FieldPropNames.Length; i++)
             {

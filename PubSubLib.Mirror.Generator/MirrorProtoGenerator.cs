@@ -133,7 +133,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
 
     internal static (StructGroup[] groups, int[] structGroupIndex) DetectStructGroups(List<FieldMapping> fields)
     {
-        var candidates = new List<(int index, string structName, string fieldName)>();
+        var candidates = new List<(int index, string structName, string fieldName, bool isClass)>();
 
         for (int i = 0; i < fields.Count; i++)
         {
@@ -145,24 +145,27 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             int lastX = words.LastIndexOf("X");
             if (firstX < 0 || lastX < 0 || firstX == lastX) continue;
 
+            bool isClass = firstX > 0 && words[firstX - 1] == "Class";
+
             var structName = string.Concat(words.Skip(firstX + 1).Take(lastX - firstX - 1));
             var fieldName = string.Concat(words.Skip(lastX + 1));
 
             if (string.IsNullOrEmpty(structName) || string.IsNullOrEmpty(fieldName)) continue;
 
-            candidates.Add((i, structName, fieldName));
+            candidates.Add((i, structName, fieldName, isClass));
         }
 
         var groups = new List<StructGroup>();
         var index = new int[fields.Count];
         for (int i = 0; i < fields.Count; i++) index[i] = -1;
 
-        foreach (var grp in candidates.GroupBy(c => c.structName))
+        foreach (var grp in candidates.GroupBy(c => (c.structName, c.isClass)))
         {
             var members = grp.ToList();
             if (members.Count < 2) continue;
 
-            var structName = grp.Key;
+            var structName = grp.Key.structName;
+            var isClass = grp.Key.isClass;
             var fieldName = ToFieldName(structName + "s");
 
             var protoPropNames = new string[members.Count];
@@ -257,7 +260,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             groups.Add(new StructGroup(structName, fieldName,
                 filteredProtoPropNames.ToArray(), filteredFieldPropNames.ToArray(),
                 filteredElementTypes.ToArray(), filteredIsRefTypes.ToArray(),
-                vec3Fields.ToArray(), primArrayFields.ToArray()));
+                vec3Fields.ToArray(), primArrayFields.ToArray(), isClass));
         }
 
         return (groups.ToArray(), index);
@@ -319,57 +322,127 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         foreach (var sg in info.StructGroups)
         {
             sb.AppendLine();
-            sb.AppendLine($"    public struct {sg.StructName}");
-            sb.AppendLine("    {");
-            for (int i = 0; i < sg.FieldPropNames.Length; i++)
+            if (sg.IsClass)
             {
-                sb.AppendLine($"        public {sg.ElementTypes[i]} {sg.FieldPropNames[i]} {{ get; }}");
+                sb.AppendLine($"    public class {sg.StructName} : global::PubSubLib.Mirror.IMirrorListItemDirtyProxy");
+                sb.AppendLine("    {");
+                sb.AppendLine("        private System.Action? __markDirty;");
+                sb.AppendLine("        void global::PubSubLib.Mirror.IMirrorListItemDirtyProxy.SetDirtyMarker(System.Action? md)");
+                sb.AppendLine("            => __markDirty = md;");
+                sb.AppendLine();
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    var pf = sg.FieldPropNames[i];
+                    var bf = "_" + char.ToLowerInvariant(pf[0]) + pf.Substring(1);
+                    sb.AppendLine($"        private {sg.ElementTypes[i]} {bf};");
+                    sb.AppendLine($"        public {sg.ElementTypes[i]} {pf}");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            get => {bf};");
+                    sb.AppendLine($"            set {{ if (!System.Collections.Generic.EqualityComparer<{sg.ElementTypes[i]}>.Default.Equals({bf}, value)) {{ {bf} = value; __markDirty?.Invoke(); }} }}");
+                    sb.AppendLine("        }");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                    sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
+                }
+                sb.AppendLine();
+                var ctorArgs = new List<string>();
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    ctorArgs.Add($"{sg.ElementTypes[i]} {char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                    ctorArgs.Add($"{v3Type} {argName}");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                    ctorArgs.Add($"{pa.ElementType}[] {argName}");
+                }
+                sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
+                sb.AppendLine("        {");
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    var pf = sg.FieldPropNames[i];
+                    var bf = "_" + char.ToLowerInvariant(pf[0]) + pf.Substring(1);
+                    var argName = $"{char.ToLowerInvariant(pf[0])}{pf.Substring(1)}";
+                    sb.AppendLine($"            {bf} = {argName};");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"            {vf.FieldName} = {argName};");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                    sb.AppendLine($"            {pa.FieldName} = {argName};");
+                }
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
             }
-            foreach (var vf in sg.Vector3Fields)
+            else
             {
-                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
-                sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
+                sb.AppendLine($"    public struct {sg.StructName}");
+                sb.AppendLine("    {");
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    sb.AppendLine($"        public {sg.ElementTypes[i]} {sg.FieldPropNames[i]} {{ get; }}");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                    sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
+                }
+                sb.AppendLine();
+                var ctorArgs = new List<string>();
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    ctorArgs.Add($"{sg.ElementTypes[i]} {char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                    ctorArgs.Add($"{v3Type} {argName}");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                    ctorArgs.Add($"{pa.ElementType}[] {argName}");
+                }
+                sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
+                sb.AppendLine("        {");
+                for (int i = 0; i < sg.FieldPropNames.Length; i++)
+                {
+                    var argName = $"{char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}";
+                    sb.AppendLine($"            {sg.FieldPropNames[i]} = {argName};");
+                }
+                foreach (var vf in sg.Vector3Fields)
+                {
+                    var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"            {vf.FieldName} = {argName};");
+                }
+                foreach (var pa in sg.PrimitiveArrayFields)
+                {
+                    var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                    sb.AppendLine($"            {pa.FieldName} = {argName};");
+                }
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
             }
-            foreach (var pa in sg.PrimitiveArrayFields)
-            {
-                sb.AppendLine($"        public {pa.ElementType}[] {pa.FieldName} {{ get; }}");
-            }
-            sb.AppendLine();
-            var ctorArgs = new List<string>();
-            for (int i = 0; i < sg.FieldPropNames.Length; i++)
-            {
-                ctorArgs.Add($"{sg.ElementTypes[i]} {char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}");
-            }
-            foreach (var vf in sg.Vector3Fields)
-            {
-                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
-                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
-                ctorArgs.Add($"{v3Type} {argName}");
-            }
-            foreach (var pa in sg.PrimitiveArrayFields)
-            {
-                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
-                ctorArgs.Add($"{pa.ElementType}[] {argName}");
-            }
-            sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
-            sb.AppendLine("        {");
-            for (int i = 0; i < sg.FieldPropNames.Length; i++)
-            {
-                var argName = $"{char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}";
-                sb.AppendLine($"            {sg.FieldPropNames[i]} = {argName};");
-            }
-            foreach (var vf in sg.Vector3Fields)
-            {
-                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
-                sb.AppendLine($"            {vf.FieldName} = {argName};");
-            }
-            foreach (var pa in sg.PrimitiveArrayFields)
-            {
-                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
-                sb.AppendLine($"            {pa.FieldName} = {argName};");
-            }
-            sb.AppendLine("        }");
-            sb.AppendLine("    }");
         }
 
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
@@ -744,7 +817,8 @@ internal sealed class StructGroup
     public readonly bool[] IsRefTypes;
     public readonly StructVector3Field[] Vector3Fields;
     public readonly StructPrimitiveArrayField[] PrimitiveArrayFields;
-    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes, StructVector3Field[] vector3Fields, StructPrimitiveArrayField[] primitiveArrayFields)
+    public readonly bool IsClass;
+    public StructGroup(string structName, string fieldName, string[] protoPropNames, string[] fieldPropNames, string[] elementTypes, bool[] isRefTypes, StructVector3Field[] vector3Fields, StructPrimitiveArrayField[] primitiveArrayFields, bool isClass = false)
     {
         StructName = structName;
         FieldName = fieldName;
@@ -754,6 +828,7 @@ internal sealed class StructGroup
         IsRefTypes = isRefTypes;
         Vector3Fields = vector3Fields;
         PrimitiveArrayFields = primitiveArrayFields;
+        IsClass = isClass;
     }
 }
 

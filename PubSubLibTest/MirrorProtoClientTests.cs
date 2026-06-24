@@ -63,6 +63,13 @@ public partial class PrimitiveArrayStructTestMirrorClient
     partial void OnCommit(string commit) => LastCommit = commit;
 }
 
+[MirrorProtoClient(typeof(ClassTestMsg))]
+public partial class ClassTestMirrorClient
+{
+    public string? LastCommit { get; private set; }
+    partial void OnCommit(string commit) => LastCommit = commit;
+}
+
 public class MirrorProtoClientTests
 {
     [Fact]
@@ -658,4 +665,48 @@ public class MirrorProtoClientTests
         Assert.Equal(new long[] { 3, 4, 5 }, p.Bean);
         Assert.Equal(new float[] { 0.2f, 0.3f }, p.Scores);
     }
+
+    [Fact]
+    public void ClassGroup_ApplyUpdate_Deserializes()
+    {
+        var mirror = new ClassTestMirrorClient();
+        var src = new ClassTestMsg { Version = 5 };
+        src.ClassXPlayerXId.Add(10);
+        src.ClassXPlayerXName.Add("alpha");
+        src.ClassXPlayerXId.Add(20);
+        src.ClassXPlayerXName.Add("beta");
+
+        mirror.ApplyUpdate(src.ToByteArray(), "init");
+
+        Assert.Equal(2, mirror.Players.Count);
+        Assert.Equal(10L, mirror.Players[0].Id);
+        Assert.Equal("alpha", mirror.Players[0].Name);
+        Assert.Equal(20L, mirror.Players[1].Id);
+        Assert.Equal("beta", mirror.Players[1].Name);
+    }
+
+    [Fact]
+    public void ClassGroup_SecondApplyUpdate_ReplacesList()
+    {
+        var mirror = new ClassTestMirrorClient();
+        var src1 = new ClassTestMsg();
+        src1.ClassXPlayerXId.Add(1);
+        src1.ClassXPlayerXName.Add("first");
+        mirror.ApplyUpdate(src1.ToByteArray(), "init");
+        Assert.Single(mirror.Players);
+
+        var src2 = new ClassTestMsg();
+        src2.ClassXPlayerXId.Add(9);
+        src2.ClassXPlayerXName.Add("second");
+        src2.ClassXPlayerXId.Add(8);
+        src2.ClassXPlayerXName.Add("third");
+        mirror.ApplyUpdate(src2.ToByteArray(), "update");
+
+        Assert.Equal(2, mirror.Players.Count);
+        Assert.Equal(9L, mirror.Players[0].Id);
+        Assert.Equal("second", mirror.Players[0].Name);
+        Assert.Equal(8L, mirror.Players[1].Id);
+        Assert.Equal("third", mirror.Players[1].Name);
+    }
+
 }
