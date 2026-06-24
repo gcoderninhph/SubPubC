@@ -19,6 +19,11 @@ public partial class TestPlayerDataClient
 {
     public string? LastCommit { get; private set; }
     partial void OnCommit(string commit) => LastCommit = commit;
+
+    partial void OnStart()
+    {
+        Console.WriteLine(LastCommit);
+    }
 }
 
 public class PlayerSpeaksTestAll : IDisposable
@@ -99,6 +104,7 @@ public class PlayerSpeaksTestAll : IDisposable
     private sealed record PlayerSpeaksClientHandle(IClient Client, IPlayerSpeaksClientModule Module) : IDisposable
     {
         public IPlayerSpeaksClient ClientData => Module.Get();
+
         public void Dispose()
         {
             Module.Dispose();
@@ -115,11 +121,15 @@ public class PlayerSpeaksTestAll : IDisposable
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
+        serverData.WatcherId = 111L;
 
         using var handle = await CreateClientAsync("test", playerId);
 
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
+        await Task.Delay(2000);
+
+        Assert.Equal(111L, clientData!.WatcherId);
 
         await Task.Delay(2000);
 
@@ -165,6 +175,7 @@ public class PlayerSpeaksTestAll : IDisposable
                 break;
             await Task.Delay(50);
         }
+
         Assert.Equal(777L, clientData!.WatcherId);
 
         await Task.Delay(500);
@@ -208,6 +219,7 @@ public class PlayerSpeaksTestAll : IDisposable
                 break;
             await Task.Delay(50);
         }
+
         Assert.Equal(111L, clientData1!.WatcherId);
         Assert.NotEqual(111L, clientData2!.WatcherId);
 
@@ -222,6 +234,7 @@ public class PlayerSpeaksTestAll : IDisposable
                 break;
             await Task.Delay(50);
         }
+
         Assert.Equal(222L, clientData2!.WatcherId);
         Assert.NotEqual(222L, clientData1!.WatcherId);
     }

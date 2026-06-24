@@ -379,7 +379,10 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
         sb.AppendLine("    public long PlayerId => ___gs_playerId;");
-        sb.AppendLine("    void global::PubSubLib.IPlayerDataInternal.SetPlayerId(long playerId) => ___gs_playerId = playerId;");
+        sb.AppendLine("    void global::PubSubLib.IPlayerDataInternal.SetPlayerId(long playerId)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        ___gs_playerId = playerId;");
+        sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    private bool ___gs_isOnLine;");
         sb.AppendLine("    public bool IsOnLine => ___gs_isOnLine;");
@@ -507,15 +510,13 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
             sb.AppendLine("        var proto = GetMirrorProto();");
             foreach (var sg in info.StructGroups)
             {
-                sb.AppendLine($"        {sg.StructName}[]? ___arr_{sg.FieldName} = {sg.FieldName}.IsDirty ? {sg.FieldName}.ToArray() : null;");
-                sb.AppendLine($"        {sg.FieldName}.ClearDirty();");
+                sb.AppendLine($"        {sg.StructName}[]? ___arr_{sg.FieldName} = {sg.FieldName}.TrySnapshot();");
             }
             foreach (var vg in info.VectorGroups)
             {
                 if (vg.IsList)
                 {
-                    sb.AppendLine($"        global::PubSubLib.Vector3[]? ___arr_{vg.FieldName} = {vg.FieldName}.IsDirty ? {vg.FieldName}.ToArray() : null;");
-                    sb.AppendLine($"        {vg.FieldName}.ClearDirty();");
+                    sb.AppendLine($"        global::PubSubLib.Vector3[]? ___arr_{vg.FieldName} = {vg.FieldName}.TrySnapshot();");
                 }
             }
             foreach (var f in info.Fields)
@@ -524,8 +525,7 @@ public sealed class MirrorProtoGenerator : IIncrementalGenerator
                 if (f.VectorGroupIndex >= 0) continue;
                 if (f.IsRepeated)
                 {
-                    sb.AppendLine($"        {f.ElementTypeName}[]? ___arr_{f.FieldName} = {f.FieldName}.IsDirty ? {f.FieldName}.ToArray() : null;");
-                    sb.AppendLine($"        {f.FieldName}.ClearDirty();");
+                    sb.AppendLine($"        {f.ElementTypeName}[]? ___arr_{f.FieldName} = {f.FieldName}.TrySnapshot();");
                 }
             }
             sb.AppendLine("        global::PubSubLib.Mirror.MirrorProtoBus.Enqueue(proto,");

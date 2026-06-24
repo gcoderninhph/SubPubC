@@ -9,7 +9,9 @@ namespace PubSubLibTest;
 public partial class RemoveWatcherMirrorClient
 {
     public string? LastCommit { get; private set; }
+    public bool OnStartCalled { get; private set; }
     partial void OnCommit(string commit) => LastCommit = commit;
+    partial void OnStart() => OnStartCalled = true;
 }
 
 [MirrorProtoClient(typeof(BatchEnterMsg))]
@@ -120,6 +122,22 @@ public class MirrorProtoClientTests
 
         Assert.Equal("player_did_action", mirror.LastCommit);
         Assert.Equal(42L, mirror.WatcherId);
+    }
+
+    [Fact]
+    public void OnStart_Invoked_OnlyOnce_OnFirstApplyUpdate()
+    {
+        var mirror = new RemoveWatcherMirrorClient();
+        Assert.False(mirror.OnStartCalled);
+
+        mirror.ApplyUpdate(new RemoveWatcherCmd { WatcherId = 1 }.ToByteArray(), "init");
+        Assert.True(mirror.OnStartCalled);
+        Assert.Equal("init", mirror.LastCommit);
+
+        mirror.ApplyUpdate(new RemoveWatcherCmd { WatcherId = 2 }.ToByteArray(), "update");
+        Assert.True(mirror.OnStartCalled);
+        Assert.Equal("update", mirror.LastCommit);
+        Assert.Equal(2L, mirror.WatcherId);
     }
 
     [Fact]

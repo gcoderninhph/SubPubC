@@ -188,6 +188,8 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");
         sb.AppendLine("    private readonly Dictionary<string, List<Action<byte[]>>> _msgHandlers = new();");
         sb.AppendLine("    private Action<string, long, byte[]>? _onSendMessage;");
+        sb.AppendLine("    private bool _initialized;");
+        sb.AppendLine("    public bool IsInitialized => _initialized;");
         sb.AppendLine();
         sb.AppendLine("    private long ___gs_playerId;");
         sb.AppendLine("    public long PlayerId { get => ___gs_playerId; set => ___gs_playerId = value; }");
@@ -202,6 +204,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    partial void OnCommit(string commit);");
+        sb.AppendLine("    partial void OnStart();");
         sb.AppendLine();
         sb.AppendLine("    public global::MyConnection.ISubscribe OnMessage<T>(string subject, Action<T> callback)");
         sb.AppendLine("        where T : class, global::Google.Protobuf.IMessage<T>, new()");
@@ -428,6 +431,11 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         sb.AppendLine($"        var proto = {info.ProtoTypeFullName}.Parser.ParseFrom(data);");
         sb.AppendLine("        _mirrorProto = proto;");
         sb.AppendLine("        SyncFromProto();");
+        sb.AppendLine("        if (!_initialized)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            _initialized = true;");
+        sb.AppendLine("            OnStart();");
+        sb.AppendLine("        }");
         sb.AppendLine("        OnCommit(commit);");
         sb.AppendLine("    }");
         sb.AppendLine();

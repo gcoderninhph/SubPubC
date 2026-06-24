@@ -256,9 +256,16 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
             var key = new PlayerDataKey(msg.DataName, msg.PlayerId);
             if (_data.TryGetValue(key, out var data) && data is IPlayerDataInternal di)
             {
-                var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
-                foreach (var a in actions)
-                    _mainThreadActions.Enqueue(a);
+                if (msg.Subject == "__player_speaks_init__")
+                {
+                    data.Commit("init");
+                }
+                else
+                {
+                    var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
+                    foreach (var a in actions)
+                        _mainThreadActions.Enqueue(a);
+                }
             }
         }
         catch (Exception ex) { PubSubLog.Error(ex, "OnClientMsg failed"); }

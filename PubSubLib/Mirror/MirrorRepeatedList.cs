@@ -8,6 +8,8 @@ namespace PubSubLib.Mirror;
 public class MirrorRepeatedList<T> : IList<T>
 {
     private readonly List<T> _list = new();
+    private readonly object _lock = new();
+    private bool _isDirty;
 
     public int Count => _list.Count;
     public bool IsReadOnly => false;
@@ -17,33 +19,56 @@ public class MirrorRepeatedList<T> : IList<T>
         get => _list[index];
         set
         {
-            _list[index] = value;
-            IsDirty = true;
+            lock (_lock)
+            {
+                _list[index] = value;
+                _isDirty = true;
+            }
         }
     }
 
-    public bool IsDirty { get; private set; }
+    public bool IsDirty
+    {
+        get { lock (_lock) return _isDirty; }
+        private set { lock (_lock) _isDirty = value; }
+    }
 
     public void ClearDirty()
     {
-        IsDirty = false;
+        lock (_lock) _isDirty = false;
+    }
+
+    public T[]? TrySnapshot()
+    {
+        lock (_lock)
+        {
+            if (!_isDirty) return null;
+            _isDirty = false;
+            return _list.ToArray();
+        }
     }
 
     public T[] ToArray()
     {
-        return _list.ToArray();
+        lock (_lock) return _list.ToArray();
     }
 
     public void Add(T item)
     {
-        _list.Add(item);
-        IsDirty = true;
+        lock (_lock)
+        {
+            _list.Add(item);
+            _isDirty = true;
+        }
     }
 
     public void Clear()
     {
-        _list.Clear();
-        IsDirty = true;
+        lock (_lock)
+        {
+            _list.Clear();
+            _isDirty = true;
+        }
     }
 
     public bool Contains(T item)
@@ -53,7 +78,7 @@ public class MirrorRepeatedList<T> : IList<T>
 
     public void CopyTo(T[] array, int arrayIndex)
     {
-        _list.CopyTo(array, arrayIndex);
+        lock (_lock) _list.CopyTo(array, arrayIndex);
     }
 
     public int IndexOf(T item)
@@ -63,22 +88,33 @@ public class MirrorRepeatedList<T> : IList<T>
 
     public void Insert(int index, T item)
     {
-        _list.Insert(index, item);
-        IsDirty = true;
+        lock (_lock)
+        {
+            _list.Insert(index, item);
+            _isDirty = true;
+        }
     }
 
     public bool Remove(T item)
     {
-        var result = _list.Remove(item);
-        if (result)
-            IsDirty = true;
-        return result;
+        lock (_lock)
+        {
+            if (_list.Remove(item))
+            {
+                _isDirty = true;
+                return true;
+            }
+            return false;
+        }
     }
 
     public void RemoveAt(int index)
     {
-        _list.RemoveAt(index);
-        IsDirty = true;
+        lock (_lock)
+        {
+            _list.RemoveAt(index);
+            _isDirty = true;
+        }
     }
 
     public IEnumerator<T> GetEnumerator()
