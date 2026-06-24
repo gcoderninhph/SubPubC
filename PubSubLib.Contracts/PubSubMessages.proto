@@ -209,6 +209,8 @@ message ClassTestMsg {
     repeated int64 class_x_player_x_id = 1;
     repeated string class_x_player_x_name = 2;
     int32 version = 3;
+    repeated float class_x_player_x_position_vector3s_value = 4;
+    repeated int32 class_x_player_x_position_vector3s_count = 5;
 }
 
 // ===== Mirror SendMessage Test =====

@@ -141,8 +141,16 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             }
             foreach (var vf in sg.Vector3Fields)
             {
-                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
-                sb.AppendLine($"        public {v3Type} {vf.FieldName} {{ get; }}");
+                if (vf.IsArray)
+                {
+                    var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"        private readonly System.Collections.Generic.List<global::PubSubLib.Vector3> {bf} = new();");
+                    sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3> {vf.FieldName} => {bf};");
+                }
+                else
+                {
+                    sb.AppendLine($"        public global::PubSubLib.Vector3 {vf.FieldName} {{ get; }}");
+                }
             }
             foreach (var pa in sg.PrimitiveArrayFields)
             {
@@ -157,7 +165,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             foreach (var vf in sg.Vector3Fields)
             {
                 var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
-                var v3Type = vf.IsArray ? "global::PubSubLib.Vector3[]" : "global::PubSubLib.Vector3";
+                var v3Type = vf.IsArray ? "System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3>" : "global::PubSubLib.Vector3";
                 ctorArgs.Add($"{v3Type} {argName}");
             }
             foreach (var pa in sg.PrimitiveArrayFields)
@@ -175,7 +183,15 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             foreach (var vf in sg.Vector3Fields)
             {
                 var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
-                sb.AppendLine($"            {vf.FieldName} = {argName};");
+                if (vf.IsArray)
+                {
+                    var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"            {bf} = new System.Collections.Generic.List<global::PubSubLib.Vector3>({argName});");
+                }
+                else
+                {
+                    sb.AppendLine($"            {vf.FieldName} = {argName};");
+                }
             }
             foreach (var pa in sg.PrimitiveArrayFields)
             {

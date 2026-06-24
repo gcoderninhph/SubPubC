@@ -356,7 +356,7 @@ public class MirrorProtoClientTests
         Assert.Single(list[0].Position);
         Assert.Equal(1f, list[0].Position[0].x);
         Assert.Equal(2L, list[1].Id);
-        Assert.Equal(2, list[1].Position.Length);
+        Assert.Equal(2, list[1].Position.Count);
         Assert.Equal(4f, list[1].Position[0].x);
         Assert.Equal(7f, list[1].Position[1].x);
     }
@@ -404,7 +404,7 @@ public class MirrorProtoClientTests
         var list = ((System.Collections.Generic.IReadOnlyList<Vector3StructTestMirrorClient.Player>)mirror.Players);
         Assert.Single(list);
         Assert.Equal(9L, list[0].Id);
-        Assert.Equal(2, list[0].Position.Length);
+        Assert.Equal(2, list[0].Position.Count);
         Assert.Equal(9f, list[0].Position[0].x);
         Assert.Equal(6f, list[0].Position[1].x);
     }
@@ -707,6 +707,62 @@ public class MirrorProtoClientTests
         Assert.Equal("second", mirror.Players[0].Name);
         Assert.Equal(8L, mirror.Players[1].Id);
         Assert.Equal("third", mirror.Players[1].Name);
+    }
+
+    [Fact]
+    public void ClassGroup_Vector3_ApplyUpdate_Deserializes()
+    {
+        var src = new ClassTestMsg { Version = 5 };
+        src.ClassXPlayerXId.Add(1);
+        src.ClassXPlayerXName.Add("ninh");
+        src.ClassXPlayerXPositionVector3SValue.Add(1);
+        src.ClassXPlayerXPositionVector3SValue.Add(2);
+        src.ClassXPlayerXPositionVector3SValue.Add(3);
+        src.ClassXPlayerXPositionVector3SCount.Add(1);
+        var bytes = src.ToByteArray();
+
+        var mirror = new ClassTestMirrorClient();
+        mirror.ApplyUpdate(bytes, "init");
+
+        var list = ((System.Collections.Generic.IReadOnlyList<ClassTestMirrorClient.Player>)mirror.Players);
+        Assert.Single(list);
+        Assert.Equal(1L, list[0].Id);
+        Assert.Equal("ninh", list[0].Name);
+        Assert.Single(list[0].Position);
+        Assert.Equal(1f, list[0].Position[0].x);
+        Assert.Equal(2f, list[0].Position[0].y);
+        Assert.Equal(3f, list[0].Position[0].z);
+    }
+
+    [Fact]
+    public void ClassGroup_Vector3_SecondApplyUpdate_Replaces()
+    {
+        var src1 = new ClassTestMsg();
+        src1.ClassXPlayerXId.Add(1);
+        src1.ClassXPlayerXName.Add("first");
+        src1.ClassXPlayerXPositionVector3SCount.Add(1);
+        src1.ClassXPlayerXPositionVector3SValue.Add(1); src1.ClassXPlayerXPositionVector3SValue.Add(2); src1.ClassXPlayerXPositionVector3SValue.Add(3);
+        var bytes1 = src1.ToByteArray();
+
+        var src2 = new ClassTestMsg();
+        src2.ClassXPlayerXId.Add(9);
+        src2.ClassXPlayerXName.Add("second");
+        src2.ClassXPlayerXPositionVector3SCount.Add(2);
+        src2.ClassXPlayerXPositionVector3SValue.Add(4); src2.ClassXPlayerXPositionVector3SValue.Add(5); src2.ClassXPlayerXPositionVector3SValue.Add(6);
+        src2.ClassXPlayerXPositionVector3SValue.Add(7); src2.ClassXPlayerXPositionVector3SValue.Add(8); src2.ClassXPlayerXPositionVector3SValue.Add(9);
+        var bytes2 = src2.ToByteArray();
+
+        var mirror = new ClassTestMirrorClient();
+        mirror.ApplyUpdate(bytes1, "init");
+        mirror.ApplyUpdate(bytes2, "update");
+
+        var list = ((System.Collections.Generic.IReadOnlyList<ClassTestMirrorClient.Player>)mirror.Players);
+        Assert.Single(list);
+        Assert.Equal(9L, list[0].Id);
+        Assert.Equal("second", list[0].Name);
+        Assert.Equal(2, list[0].Position.Count);
+        Assert.Equal(4f, list[0].Position[0].x);
+        Assert.Equal(7f, list[0].Position[1].x);
     }
 
 }

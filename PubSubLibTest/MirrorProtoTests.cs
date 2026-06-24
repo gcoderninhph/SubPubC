@@ -664,7 +664,7 @@ public class MirrorProtoTests
         var list = mirror.Players;
         Assert.False(list.IsDirty);
 
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         Assert.True(list.IsDirty);
     }
 
@@ -672,7 +672,7 @@ public class MirrorProtoTests
     public void ClassGroup_ChangeProperty_MarksListDirty()
     {
         var mirror = new ClassTestMirror();
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         mirror.Commit("init");
         MirrorProtoBus.Flush();
         Assert.False(mirror.Players.IsDirty);
@@ -685,7 +685,7 @@ public class MirrorProtoTests
     public void ClassGroup_ChangePropertySameValue_DoesNotMarkDirty()
     {
         var mirror = new ClassTestMirror();
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         mirror.Commit("init");
         MirrorProtoBus.Flush();
         Assert.False(mirror.Players.IsDirty);
@@ -701,7 +701,7 @@ public class MirrorProtoTests
         byte[]? data = null;
         mirror.OnChange((bytes, _) => data = bytes);
 
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         mirror.Commit("add");
         MirrorProtoBus.Flush();
 
@@ -715,7 +715,7 @@ public class MirrorProtoTests
     public void ClassGroup_ChangeProperty_Commit_SendsUpdatedValue()
     {
         var mirror = new ClassTestMirror();
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         mirror.Commit("init");
         MirrorProtoBus.Flush();
 
@@ -737,7 +737,7 @@ public class MirrorProtoTests
     public void ClassGroup_DirtyFlag_ResetsAfterCommit()
     {
         var mirror = new ClassTestMirror();
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
         Assert.True(mirror.Players.IsDirty);
 
         mirror.Commit("test");
@@ -752,9 +752,9 @@ public class MirrorProtoTests
         byte[]? data = null;
         mirror.OnChange((bytes, _) => data = bytes);
 
-        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh"));
-        mirror.Players.Add(new ClassTestMirror.Player(2, "yen"));
-        mirror.Players.Add(new ClassTestMirror.Player(3, "bao"));
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh", new Vector3[0]));
+        mirror.Players.Add(new ClassTestMirror.Player(2, "yen", new Vector3[0]));
+        mirror.Players.Add(new ClassTestMirror.Player(3, "bao", new Vector3[0]));
         mirror.Commit("multi");
         MirrorProtoBus.Flush();
 
@@ -768,7 +768,7 @@ public class MirrorProtoTests
     public void ClassGroup_Remove_DetachesDirtyMarker()
     {
         var mirror = new ClassTestMirror();
-        var player = new ClassTestMirror.Player(1, "ninh");
+        var player = new ClassTestMirror.Player(1, "ninh", new Vector3[0]);
         mirror.Players.Add(player);
         mirror.Commit("init");
         MirrorProtoBus.Flush();
@@ -787,8 +787,8 @@ public class MirrorProtoTests
     public void ClassGroup_Clear_DetachesAllDirtyMarkers()
     {
         var mirror = new ClassTestMirror();
-        var p1 = new ClassTestMirror.Player(1, "ninh");
-        var p2 = new ClassTestMirror.Player(2, "yen");
+        var p1 = new ClassTestMirror.Player(1, "ninh", new Vector3[0]);
+        var p2 = new ClassTestMirror.Player(2, "yen", new Vector3[0]);
         mirror.Players.Add(p1);
         mirror.Players.Add(p2);
         mirror.Commit("init");
@@ -802,6 +802,96 @@ public class MirrorProtoTests
         p1.Name = "after_clear";
         p2.Name = "after_clear";
         Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangeVector3Array_MarksListDirty()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Position[0] = new Vector3 { x = 9, y = 8, z = 7 };
+        Assert.True(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangeVector3Array_Commit_SendsUpdatedValue()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+
+        mirror.Players[0].Position[0] = new Vector3 { x = 9, y = 8, z = 7 };
+
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+        mirror.Commit("update");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = ClassTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new float[] { 9, 8, 7 }, parsed.ClassXPlayerXPositionVector3SValue);
+        Assert.Equal(new int[] { 1 }, parsed.ClassXPlayerXPositionVector3SCount);
+    }
+
+    [Fact]
+    public void ClassGroup_ChangeVector3ArraySameValue_DoesNotMarkDirty()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Position[0] = new Vector3 { x = 1, y = 2, z = 3 };
+        Assert.False(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void ClassGroup_Vector3Add_MarksListDirty()
+    {
+        var mirror = new ClassTestMirror();
+        mirror.Players.Add(new ClassTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        mirror.Players[0].Position.Add(new Vector3 { x = 4, y = 5, z = 6 });
+        Assert.True(mirror.Players.IsDirty);
+    }
+
+    [Fact]
+    public void Vector3Struct_ChangeArrayElement_MarksListDirty()
+    {
+        var mirror = new Vector3StructTestMirror();
+        mirror.Players.Add(new Vector3StructTestMirror.Player(1, "ninh",
+            new Vector3[] { new Vector3 { x = 1, y = 2, z = 3 } }));
+        mirror.Commit("init");
+        MirrorProtoBus.Flush();
+        Assert.False(mirror.Players.IsDirty);
+
+        var p = mirror.Players[0];
+        p.Position[0] = new Vector3 { x = 9, y = 8, z = 7 };
+        Assert.True(mirror.Players.IsDirty);
+        mirror.Players[0] = p;
+
+        byte[]? data = null;
+        mirror.OnChange((bytes, _) => data = bytes);
+        mirror.Commit("update");
+        MirrorProtoBus.Flush();
+
+        Assert.NotNull(data);
+        var parsed = Vector3StructTestMsg.Parser.ParseFrom(data!);
+        Assert.Equal(new float[] { 9, 8, 7 }, parsed.StructXPlayerXPositionVector3SValue);
+        Assert.Equal(new int[] { 1 }, parsed.StructXPlayerXPositionVector3SCount);
     }
 
 }
