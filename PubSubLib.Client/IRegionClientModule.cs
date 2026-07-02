@@ -17,5 +17,6 @@ public interface IRegionClientModule : IClientModule
     // Khi trên server tạo 1 đối tượng Mirror tương ứng với T qua IRegionModule.CreateUnit -> 
     void OnCreateUnit<T, TR>(Func<T, TR> unit) where T : IRegionUnit<TR>;
     void Destroy<T, TR>(T unit) where T : IRegionUnit<TR>;
+    // Tương tự như IPubSubClient.Tick(), nó sẽ gửi lệnh watcher ping unit lên server nhằm đồng bộ các unit trên bản đồ
     void Tick();
 }
