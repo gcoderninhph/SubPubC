@@ -9,6 +9,7 @@ public interface IPubSub : IDisposable
         return PubSub.Create(config);
     }
 
+    IUnit? GetUnitOfByType(string type, long id);
     void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class, IAlive;
     Task<IUnit> CreateUnitAsync<T>(long id, string type, Vector2 position, T target, byte[]? data = null) where T : class, IAlive;
     Task FlushAsync();

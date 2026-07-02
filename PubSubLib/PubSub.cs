@@ -38,6 +38,11 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         return p;
     }
 
+    public IUnit? GetUnitOfByType(string type, long id)
+    {
+        return _units.TryGetValue(new UnitKey(id, type), out var unit) ? unit : null;
+    }
+
     // ===== IPubSub =====
 
     public void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IUnit> onCreated, byte[]? data = null) where T : class, IAlive
