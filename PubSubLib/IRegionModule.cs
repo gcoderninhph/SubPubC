@@ -4,20 +4,25 @@ public interface IRegionModule
 {
     public static IRegionModule Create(RegionConfig config)
     {
-        throw new NotImplementedException();
+        return RegionModule.Create(config);
     }
-    
-    
 
-    Task<IRegionUnit<T>> CreateUnitAsync<T>(long id, string type, Vector2 position, T target);
-    void CreateUnit<T>(long id, string type, Vector2 position, T target, Action<IRegionUnit<T>> callback);
-    Task<IRegionUnit<T>> CreateUnitAsync<T>(long id, string type, Vector2 position, Func<T> target);
-    void CreateUnit<T>(long id, string type, Vector2 position, Func<T> target, Action<IRegionUnit<T>> callback);
+    Task<T> CreateUnitAsync<T, TR>(long id, string type, Vector2 position, TR target)
+        where T : class, IRegionUnit<TR>, new();
 
-    IRegionUnit<T> GetUnit<T>(long id) where T : IAlive;
+    void CreateUnit<T, TR>(long id, string type, Vector2 position, TR target, Action<T> callback)
+        where T : class, IRegionUnit<TR>, new();
+
+    Task<T> CreateUnitAsync<T, TR>(long id, string type, Vector2 position, Func<TR> target)
+        where T : class, IRegionUnit<TR>, new();
+
+    void CreateUnit<T, TR>(long id, string type, Vector2 position, Func<TR> target, Action<T> callback)
+        where T : class, IRegionUnit<TR>, new();
+
+    T GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new();
     object GetUnit(string type, long id);
-    IList<IRegionUnit<T>> GetUnits<T>() where T : IAlive;
+    IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new();
 
-    void DestroyUnit<T>(long id) where T : IAlive;
+    void DestroyUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new();
     void DestroyUnit(string type, long id);
 }
