@@ -2,5 +2,5 @@
 
 public interface IRegionOnStart
 {
-    void OnStarUnit();
+    void OnStartUnit();
 }

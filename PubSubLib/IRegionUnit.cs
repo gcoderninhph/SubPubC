@@ -22,6 +22,9 @@ public interface IRegionUnit<T>
     
     // ---------------------------------------------------------------------------------------------------------------
 
+    long Id { get; }
+    Vector2 Position { get; }
+
     // trả về đối tượng mà IUnit đang giữ và parse về đúng kiểu
     T Get();
 
