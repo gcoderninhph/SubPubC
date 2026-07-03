@@ -37,7 +37,13 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
         if (attr.ConstructorArguments.Length < 1 || attr.ConstructorArguments[0].Value is not INamedTypeSymbol protoType)
             return null;
 
-        var dataName = protoType.Name;
+        string? dataName = null;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "DataName" && namedArg.Value.Value is string dn)
+                dataName = dn;
+        }
+        dataName ??= protoType.Name;
 
         var ns = classSymbol.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .TrimStartGlobalPrefix() ?? "";

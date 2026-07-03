@@ -1,6 +1,7 @@
 # ── C# / .NET ─────────────────────────────────────────────────────────
-bin/
-obj/
+[Bb]in/
+[Oo]bj/
+[Bb]uild/
 *.user
 *.suo
 *.userosscache
@@ -9,10 +10,18 @@ obj/
 *.nupkg
 *.snupkg
 nupkg/
+packages/
+*.pidb
+*.cache
+*.log
+*.tmp
+[Tt]est[Rr]esult*/
+*.trx
 
 # ── Rust ──────────────────────────────────────────────────────────────
 SubPubRust/target/
 **/*.rs.bk
+*.rsuser
 Cargo.lock
 
 # ── IDE ───────────────────────────────────────────────────────────────
@@ -21,6 +30,10 @@ Cargo.lock
 *.swp
 *.swo
 *~
+*.DotSettings*
+_ReSharper*/
+*.sublime-workspace
+*.sublime-project
 
 # ── OS ────────────────────────────────────────────────────────────────
 Thumbs.db

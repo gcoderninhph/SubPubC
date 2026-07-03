@@ -27,9 +27,6 @@
 
 public interface IRegionUnit<T>
 {
-    // Khi generate sẽ tạo ra 1 string static _type, được generate từ attribute (mặc định lấy tên của class)
-    // nếu trong proto buff cũng có trường type thì trường mirror type của proto sẽ là _Type
-    string Type { get; }
     long Id { get; }
 
     // get đối tượng T mà nó giữ thông qua tham chiếu của IUnit.Target -> parse to T

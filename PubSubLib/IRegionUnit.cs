@@ -27,10 +27,7 @@ public interface IRegionUnit<T>
 
     // trả về đối tượng mà IUnit đang giữ và parse về đúng kiểu
     T Get();
-
-    // Khi generate sẽ tạo ra 1 string static _type, được generate từ attribute (mặc định lấy tên của class)
-    // nếu trong proto buff cũng có trường type thì trường mirror type của proto sẽ là _Type
-    string Type { get; }
+    
     // chuyển vào channel xử lý (MirrorProtoBus) -> ghi các thông tin vào protobuf mà nó mirror
     // -> tạo thành byte[] -> set byte[] cho IUnit -> đóng gói lại vào 1 proto commit mới
     // -> gửi event commit chứa thông tin commit và số byte[] trong IUnit thông qua IUnit.PublishEvent ("commit", dataBytes, true)

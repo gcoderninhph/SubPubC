@@ -9,12 +9,12 @@ using PubSubLib.Router;
 
 namespace PubSubLibTest;
 
-[MirrorProto(typeof(RemoveWatcherCmd), DataName = "RemoveWatcherCmd")]
+[MirrorProto(typeof(RemoveWatcherCmd), DataName = "rm")]
 public partial class TestPlayerData
 {
 }
 
-[MirrorProtoClient(typeof(RemoveWatcherCmd))]
+[MirrorProtoClient(typeof(RemoveWatcherCmd), DataName = "rm")]
 public partial class TestPlayerDataClient
 {
     public string? LastCommit { get; private set; }
@@ -342,10 +342,11 @@ public class PlayerSpeaksTestAll : IDisposable
         CreateRouter();
         await CreateServerAsync();
 
-        _manager.OnDefault<TestPlayerData>(async data =>
+        _manager.OnDefault<TestPlayerData>(data =>
         {
             data.WatcherId = 42;
             data.Commit("default_init");
+            return Task.CompletedTask;
         });
 
         await Task.Delay(3000);

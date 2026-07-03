@@ -6,18 +6,18 @@ public interface IRegionClientModule : IClientModule
 {
     static IRegionClientModule Create(Config config)
     {
-        return RegionClientModule.Create(config);
+        throw  new NotImplementedException();
     }
 
     // Lấy ra 1 đối tượng T cụ thể thông qua id của đối tượng
-    T GetUnit<T, TR>(long id) where T : IRegionUnit<TR>;
+    T GetUnit<T, TR>(long id) where T : IRegionUnit<TR> where TR : class, IAlive;
     // Lấy toàn bộ các đối tượng thuộc class T mà IRegionClientModule quản lý
-    IList<T> GetUnits<T, TR>() where T : IRegionUnit<TR>;
+    IList<T> GetUnits<T, TR>() where T : IRegionUnit<TR> where TR : class, IAlive;
 
     // Khi trên server tạo 1 đối tượng Mirror tương ứng với T qua IRegionModule.CreateUnit -> 
-    void OnCreateUnit<T, TR>(Func<T, TR> unit) where T : IRegionUnit<TR>;
+    void OnCreateUnit<T, TR>(Func<T, TR> unit) where T : IRegionUnit<TR> where TR : class, IAlive;
     // Xóa T thủ công, khi xóa sẽ dọn sạch cả 
-    void Destroy<T, TR>(T unit) where T : IRegionUnit<TR>;
+    void Destroy<T, TR>(T unit) where T : IRegionUnit<TR> where TR : class, IAlive;
     // Tương tự như IPubSubClient.Tick(), nó sẽ gửi lệnh watcher ping unit lên server nhằm đồng bộ các unit trên bản đồ
     void Tick();
     void MoveWatcher(Vector2 position, float range);
