@@ -1,12 +1,13 @@
 ﻿namespace PubSubLib.Client;
 
+// Đây là 1 interface wrapper IUnit
 // Cách hoạt động gần giống với IPubSubClient
 // Nhận unit từ IRegionModule.CreateUnit (server side) được invoke thông qua IRegionClientModule.OnCreateUnit (client side)
 // Nhận thông tin đồng bộ từ IRegionUnit<T>.Commit (server side) xuống đối tượng
 
 
 // đối tượng này sẽ được generate code và tự động triển khai bằng attribute UnitMirrorClient, attribute này sẽ có
-// logic mirror giống hệt với MirrorProtoClient
+// logic mirror giống hệt với MirrorProtoClient,  nhưng trường DataName -> UnitType
 // đối tượng này sẽ giữ 1 IUnit bên trong nó
 
 
@@ -28,6 +29,9 @@
 public interface IRegionUnit<T>
 {
     long Id { get; }
+    
+    // khi generate sẽ tạo ra 1 trường static string _unitType, lúc đó sẽ UnitType => _unitType
+    string UnitType { get; }
 
     // get đối tượng T mà nó giữ thông qua tham chiếu của IUnit.Target -> parse to T
     T Get();

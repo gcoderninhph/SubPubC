@@ -2,6 +2,7 @@
 
 namespace PubSubLib;
 
+// Đây là 1 interface wrapper IUnit
 // đối tượng này sẽ được generate code và tự động triển khai bằng attribute UnitMirrorServer, attribute này sẽ có
 // logic mirror giống hệt với MirrorProto
 // đối tượng này sẽ giữ 1 IUnit bên trong nó
@@ -23,7 +24,12 @@ public interface IRegionUnit<T>
     // ---------------------------------------------------------------------------------------------------------------
 
     long Id { get; }
-    Vector2 Position { get; }
+    
+    // khi generate sẽ tạo ra 1 trường static string _unitType, lúc đó sẽ UnitType => _unitType
+    string UnitType { get; }
+    
+    // khi generate lấy Positon từ unit Position get => _unit.Position và set Position {_unit.Position = value} 
+    Vector2 Position { get; set; }
 
     // trả về đối tượng mà IUnit đang giữ và parse về đúng kiểu
     T Get();
@@ -36,7 +42,7 @@ public interface IRegionUnit<T>
     // -> gửi event thành chứa thông tin subject + byte thông qua IUnit.PublishEvent ("message", dataBytes, reliable)
     void SendMessage<TProto>(string subject, TProto message, bool reliable) where TProto : class, IMessage<TProto>, new();
     
-    // chỉ đơn giản là IUnit.Positon = value, không gửi bất cứ sự kiện nào tới client
+    // chỉ đơn giản là IUnit.Positon = value, không gửi bất cứ sự kiện nào tới client, tương tự cách xử lý với Position
     void SetPosition(float x, float y);
     void SetPosition(Vector2  position);
 
