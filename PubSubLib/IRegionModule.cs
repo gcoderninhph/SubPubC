@@ -4,7 +4,7 @@ public interface IRegionModule
 {
     public static IRegionModule Create(RegionConfig config)
     {
-        throw  new NotImplementedException();
+        return new RegionModule(config);
     }
 
     Task<T> CreateUnitAsync<T, TR>(long id,  Vector2 position, TR target)

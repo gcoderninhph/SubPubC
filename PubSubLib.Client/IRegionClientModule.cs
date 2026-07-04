@@ -6,7 +6,7 @@ public interface IRegionClientModule : IClientModule
 {
     static IRegionClientModule Create(Config config)
     {
-        throw  new NotImplementedException();
+        return new RegionClientModule(config);
     }
 
     // Lấy ra 1 đối tượng T cụ thể thông qua id của đối tượng

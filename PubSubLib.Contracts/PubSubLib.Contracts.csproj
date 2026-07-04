@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Protobuf Include="PubSubMessages.proto" />
+    <Protobuf Include="RegionMessages.proto" />
   </ItemGroup>
 
 </Project>
