@@ -56,6 +56,5 @@ internal sealed class RegionNatifySync : IDisposable
 
     public void Dispose()
     {
-        _natify.Dispose();
     }
 }

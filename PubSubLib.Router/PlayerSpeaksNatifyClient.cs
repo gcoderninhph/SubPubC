@@ -60,6 +60,5 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
 
     public void Dispose()
     {
-        _server.Dispose();
     }
 }

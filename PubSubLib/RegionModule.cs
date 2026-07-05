@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using Natify;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
@@ -7,9 +8,18 @@ namespace PubSubLib;
 internal sealed class RegionModule : IRegionModule, IDisposable
 {
     private readonly IPubSub _pubSub;
-    private readonly RegionNatifySync? _natifySync;
+    private readonly INatifyAdapter? _natifyAdapter;
+    private readonly RegionNatifySync? _regionSync;
     private readonly Dictionary<UnitKey, object> _units = new();
     private readonly Dictionary<string, Delegate> _factories = new();
+    private ISubscrible? _subBatchEnter;
+    private ISubscrible? _subBatchLeave;
+    private ISubscrible? _subSyncEnter;
+    private ISubscrible? _subSyncLeave;
+    private ISubscrible? _subUnitEvent;
+
+    private const string PubSubCmdTopic = "PubSub.Cmd";
+    private const string PubSubEvtTopic = "PubSub.Evt";
 
     internal RegionModule(RegionConfig config)
     {
@@ -17,19 +27,37 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 
         if (config.NatifyClient != null)
         {
-            var natifyAdapter = new NatifyAdapter(config.NatifyClient);
-            _natifySync = new RegionNatifySync(natifyAdapter, this);
-            _natifySync.OnCreateUnitCmd(HandleCreateUnitCmd);
-            _natifySync.OnDestroyUnitCmd(HandleDestroyUnitCmd);
+            _natifyAdapter = new NatifyAdapter(config.NatifyClient);
+
+            _regionSync = new RegionNatifySync(_natifyAdapter, this);
+            _regionSync.OnCreateUnitCmd(HandleCreateUnitCmd);
+            _regionSync.OnDestroyUnitCmd(HandleDestroyUnitCmd);
+
+            _natifyAdapter.Subscribe<PubSubCommand>(PubSubCmdTopic, OnPubSubCommand);
+
+            Action<(List<long> watcherIds, IUnit unit)> batchEnter = a => OnPubSubBatchEnter(a.unit, a.watcherIds);
+            Action<(List<long> watcherIds, IUnit unit)> batchLeave = a => OnPubSubBatchLeave(a.unit, a.watcherIds);
+            Action<(long watcherId, List<IUnit> units)> syncEnter = a => OnPubSubSyncEnter(a.watcherId, a.units);
+            Action<(long watcherId, List<UnitKey> unitKeys)> syncLeave = a => OnPubSubSyncLeave(a.watcherId, a.unitKeys);
+            Action<(List<long> watcherIds, IUnit unit, string eventName, object data, bool reliable)> unitEvent =
+                a => OnPubSubUnitEvent(a.unit, a.watcherIds, a.eventName, a.data, a.reliable);
+
+            _subBatchEnter = _pubSub.OnUnitEnter(batchEnter);
+            _subBatchLeave = _pubSub.OnUnitLeave(batchLeave);
+            _subSyncEnter = _pubSub.OnUnitEnter(syncEnter);
+            _subSyncLeave = _pubSub.OnUnitLeave(syncLeave);
+            _subUnitEvent = _pubSub.OnUnitEvent(unitEvent);
         }
     }
 
     public void RegisterUnitType<T, TR>(string unitType, Func<TR>? factory = null)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         _factories[unitType] = factory ?? (() => default!);
     }
+
+    // ===== Inbound Region commands =====
 
     private void HandleCreateUnitCmd(CreateUnitCmd cmd)
     {
@@ -54,8 +82,161 @@ internal sealed class RegionModule : IRegionModule, IDisposable
             unit.Destroy();
     }
 
+    // ===== Inbound PubSub commands =====
+
+    private void OnPubSubCommand(Data<PubSubCommand> data)
+    {
+        try
+        {
+            var cmd = data.Value;
+            switch (cmd.CmdCase)
+            {
+                case PubSubCommand.CmdOneofCase.AddWatcher:
+                    HandleAddWatcher(cmd.AddWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.RemoveWatcher:
+                    HandleRemoveWatcher(cmd.RemoveWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.MoveWatcher:
+                    HandleMoveWatcher(cmd.MoveWatcher);
+                    break;
+                case PubSubCommand.CmdOneofCase.PingUnits:
+                    HandlePingUnits(cmd.PingUnits);
+                    break;
+                case PubSubCommand.CmdOneofCase.PublishEvent:
+                    HandlePublishEvent(cmd.PublishEvent);
+                    break;
+            }
+        }
+        catch (Exception ex) { PubSubLog.Error(ex, "RegionModule.OnPubSubCommand failed"); }
+    }
+
+    private void HandleAddWatcher(AddWatcherCmd cmd)
+    {
+        _pubSub.AddWatcher(cmd.WatcherId, new Vector2 { x = cmd.PosX, y = cmd.PosY }, cmd.Radius);
+    }
+
+    private void HandleRemoveWatcher(RemoveWatcherCmd cmd)
+    {
+        _pubSub.RemoveWatcher(cmd.WatcherId);
+    }
+
+    private void HandleMoveWatcher(MoveWatcherCmd cmd)
+    {
+        _pubSub.MoveWatcher(cmd.WatcherId, new Vector2 { x = cmd.PosX, y = cmd.PosY }, cmd.Radius);
+    }
+
+    private void HandlePingUnits(PingUnitsCmd cmd)
+    {
+        var typeVersions = new Dictionary<string, Dictionary<long, int>>();
+        foreach (var group in cmd.Units)
+        {
+            var dict = new Dictionary<long, int>();
+            var ids = group.UnitIds;
+            var versions = group.Versions;
+            var count = Math.Min(ids.Count, versions.Count);
+            for (int i = 0; i < count; i++)
+                dict[ids[i]] = versions[i];
+            typeVersions[group.Type] = dict;
+        }
+        _pubSub.WatcherPingUnits(cmd.WatcherId, typeVersions);
+    }
+
+    private void HandlePublishEvent(PublishEventCmd cmd)
+    {
+        var unit = _pubSub.GetUnitOfByType(cmd.UnitType, cmd.UnitId);
+        if (unit != null)
+            unit.PublishEvent(cmd.EventName, cmd.Data?.ToByteArray(), !cmd.UseUdp);
+    }
+
+    // ===== Outbound PubSub events (After* hooks) =====
+
+    private void OnPubSubBatchEnter(IUnit unit, List<long> watcherIds)
+    {
+        var data = ByteString.CopyFrom(unit.Data ?? Array.Empty<byte>());
+        var msg = new BatchEnterMsg
+        {
+            UnitId = unit.Id,
+            UnitType = unit.Type,
+            PosX = unit.Position.x,
+            PosY = unit.Position.y,
+            Data = data,
+            Version = unit.Version
+        };
+        msg.WatcherIds.AddRange(watcherIds);
+
+        _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { BatchEnter = msg });
+    }
+
+    private void OnPubSubBatchLeave(IUnit unit, List<long> watcherIds)
+    {
+        var msg = new BatchLeaveMsg
+        {
+            UnitId = unit.Id,
+            UnitType = unit.Type
+        };
+        msg.WatcherIds.AddRange(watcherIds);
+
+        _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { BatchLeave = msg });
+    }
+
+    private void OnPubSubSyncEnter(long watcherId, List<IUnit> units)
+    {
+        var msg = new SyncEnterMsg { WatcherId = watcherId };
+        foreach (var u in units)
+        {
+            var data = ByteString.CopyFrom(u.Data ?? Array.Empty<byte>());
+            msg.Units.Add(new UnitEnterItem
+            {
+                Id = u.Id,
+                Type = u.Type,
+                PosX = u.Position.x,
+                PosY = u.Position.y,
+                Data = data,
+                Version = u.Version
+            });
+        }
+
+        _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { SyncEnter = msg });
+    }
+
+    private void OnPubSubSyncLeave(long watcherId, List<UnitKey> keys)
+    {
+        var msg = new SyncLeaveMsg { WatcherId = watcherId };
+        var groups = new Dictionary<string, TypeGroup>();
+        foreach (var k in keys)
+        {
+            if (!groups.TryGetValue(k.Type, out var g))
+            {
+                g = new TypeGroup { Type = k.Type };
+                groups[k.Type] = g;
+            }
+            g.UnitIds.Add(k.Id);
+        }
+        msg.Keys.AddRange(groups.Values);
+
+        _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { SyncLeave = msg });
+    }
+
+    private void OnPubSubUnitEvent(IUnit unit, List<long> watcherIds, string eventName, object? data, bool reliable)
+    {
+        var msg = new UnitEventMsg
+        {
+            UnitId = unit.Id,
+            UnitType = unit.Type,
+            EventName = eventName,
+            Data = data is byte[] b ? ByteString.CopyFrom(b) : ByteString.Empty,
+            UseUdp = !reliable
+        };
+        msg.WatcherIds.AddRange(watcherIds);
+
+        _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { UnitEvent = msg });
+    }
+
+    // ===== RegionModule public API =====
+
     public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, TR target)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var tcs = new TaskCompletionSource<T>();
@@ -75,13 +256,13 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 
             _units[new UnitKey(id, unitType)] = wrapper;
 
-            _natifySync?.PublishCreateUnit(new CreateUnitEvt
+            _regionSync?.PublishCreateUnit(new CreateUnitEvt
             {
                 UnitId = id,
                 UnitType = unitType,
                 PosX = position.x,
                 PosY = position.y,
-                Data = Google.Protobuf.ByteString.CopyFrom(iu.Data ?? Array.Empty<byte>())
+                Data = ByteString.CopyFrom(iu.Data ?? Array.Empty<byte>())
             });
 
             tcs.SetResult(wrapper);
@@ -91,7 +272,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         CreateUnitAsync<T, TR>(id, position, target)
@@ -106,7 +287,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, Func<TR> targetFactory)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var target = targetFactory();
@@ -114,7 +295,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> targetFactory, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var target = targetFactory();
@@ -122,7 +303,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public T GetUnit<T, TR>(long id)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var wrapper = new T();
@@ -136,7 +317,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public IList<T> GetUnits<T, TR>()
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var wrapper = new T();
@@ -152,7 +333,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void DestroyUnit<T, TR>(long id)
-        where T : class, IRegionUnit<TR>, new()
+        where T : class, new()
         where TR : class, IAlive
     {
         var wrapper = new T();
@@ -163,18 +344,18 @@ internal sealed class RegionModule : IRegionModule, IDisposable
             return;
 
         var internalWrapper = (IRegionUnitInternal)t;
-        var target = t.Get();
+        var iu = internalWrapper.GetUnit();
+        var target = iu?.Target as TR;
 
         if (target is IRegionUnitOnDestroy od)
             od.OnUnitDestroy();
 
-        var iu = internalWrapper.GetUnit();
         if (iu != null)
             iu.Destroy();
 
         _units.Remove(key);
 
-        _natifySync?.PublishDestroyUnit(new DestroyUnitEvt
+        _regionSync?.PublishDestroyUnit(new DestroyUnitEvt
         {
             UnitId = id,
             UnitType = unitType
@@ -183,7 +364,13 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 
     public void Dispose()
     {
-        _natifySync?.Dispose();
+        _subBatchEnter?.UnSubscribe();
+        _subBatchLeave?.UnSubscribe();
+        _subSyncEnter?.UnSubscribe();
+        _subSyncLeave?.UnSubscribe();
+        _subUnitEvent?.UnSubscribe();
+        _regionSync?.Dispose();
         _pubSub.Dispose();
+        _natifyAdapter?.Dispose();
     }
 }

@@ -1,6 +1,4 @@
-﻿using Natify;
-
-namespace PubSubLib;
+﻿namespace PubSubLib;
 
 public interface IPubSub : IDisposable
 {
@@ -19,16 +17,13 @@ public interface IPubSub : IDisposable
     void MoveWatcher(long watcherId, Vector2 position, float radius);
     void WatcherPingUnits(long watcherId, Dictionary<string, Dictionary<long, int>> typeVersions);
 
-    void AddNatify(NatifyClientFast client);
-    void AddNatify(NatifyClient client);
+    ISubscrible OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack);
+    ISubscrible OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack);
 
-    void OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack);
-    void OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack);
+    ISubscrible OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack);
+    ISubscrible OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack);
 
-    void OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack);
-    void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack);
-
-    void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack);
+    ISubscrible OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack);
 }
 
 internal interface IPubSubInternal

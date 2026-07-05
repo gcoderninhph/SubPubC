@@ -1,5 +1,4 @@
 using Gcoder.Collections;
-using Natify;
 using PubSubLib.Contracts;
 
 namespace PubSubLib;
@@ -14,7 +13,6 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
     private readonly Dictionary<string, Cell> _cells;
     private readonly ISortedDictionary<long, long> _watcherExpirations;
     private readonly EventChannel _channel;
-    private PubSubNatifySync? _natifySync;
     private DateTime _lastCleanupCheck;
 
     private PubSub(PubSubConfig config)
@@ -253,67 +251,31 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         });
     }
 
-    public void AddNatify(NatifyClientFast client)
+
+
+    public ISubscrible OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack)
     {
-        var adapter = new NatifyAdapter(client);
-        AddNatifyInternal(adapter);
+        return _channel.AddOnUnitEnterBatch(callBack);
     }
 
-    public void AddNatify(NatifyClient client)
+    public ISubscrible OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack)
     {
-        var adapter = new NatifyAdapter(client);
-        AddNatifyInternal(adapter);
+        return _channel.AddOnUnitLeaveBatch(callBack);
     }
 
-    internal void AddNatifyInternal(INatifyAdapter adapter)
+    public ISubscrible OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack)
     {
-        _natifySync?.Dispose();
-        _natifySync = new PubSubNatifySync(adapter, this);
-        _channel.AfterBatchEnter = _natifySync.OnBatchEnter;
-        _channel.AfterBatchLeave = _natifySync.OnBatchLeave;
-        _channel.AfterSyncEnter = _natifySync.OnSyncEnter;
-        _channel.AfterSyncLeave = _natifySync.OnSyncLeave;
-        _channel.AfterUnitEvent = _natifySync.OnUnitEvent;
+        return _channel.AddOnUnitEnterSync(callBack);
     }
 
-    internal void HandleNatifyPublishEvent(long unitId, string unitType, string eventName, byte[]? data, bool reliable)
+    public ISubscrible OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack)
     {
-        _channel.Enqueue(() =>
-        {
-            var key = new UnitKey(unitId, unitType);
-            var unit = TryResolveAlive(key);
-            if (unit != null)
-            {
-                var watcherIds = GetWatchersInCell(unit.CurrentCellId);
-                if (watcherIds.Length > 0)
-                    FireUnitEvent(watcherIds, unit, eventName, data, reliable);
-            }
-        });
+        return _channel.AddOnUnitLeaveSync(callBack);
     }
 
-    public void OnUnitEnter(Action<(List<long> notyWatchIds, IUnit units)> callBack)
+    public ISubscrible OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack)
     {
-        _channel.OnUnitEnterBatch = callBack;
-    }
-
-    public void OnUnitLeave(Action<(List<long> notyWatchIds, IUnit units)> callBack)
-    {
-        _channel.OnUnitLeaveBatch = callBack;
-    }
-
-    public void OnUnitEnter(Action<(long notyWatchId, List<IUnit> units)> callBack)
-    {
-        _channel.OnUnitEnterSync = callBack;
-    }
-
-    public void OnUnitLeave(Action<(long notyWatchId, List<UnitKey> unitKeys)> callBack)
-    {
-        _channel.OnUnitLeaveSync = callBack;
-    }
-
-    public void OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack)
-    {
-        _channel.OnUnitEvent = callBack;
+        return _channel.AddOnUnitEvent(callBack);
     }
 
     // ===== IPubSubInternal =====
@@ -373,7 +335,6 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
 
     public void Dispose()
     {
-        _natifySync?.Dispose();
         _channel.Dispose();
     }
 
@@ -493,16 +454,18 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
     private void FireBatchEnter(long[] watcherIds, IUnit unit)
     {
         if (watcherIds.Length == 0) return;
-        var cb = _channel.OnUnitEnterBatch;
-        var after = _channel.AfterBatchEnter;
-        if (cb == null && after == null) return;
+        var cbs = _channel.SnapshotOnUnitEnterBatch();
+        if (cbs.Count == 0) return;
 
         var list = ListPool<long>.Rent();
         list.AddRange(watcherIds);
         try
         {
-            if (cb != null) { try { cb.Invoke((list, unit)); } catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEnterBatch"); } }
-            if (after != null) { try { after.Invoke(unit, list); } catch (Exception ex) { PubSubLog.Error(ex, "AfterBatchEnter"); } }
+            foreach (var cb in cbs)
+            {
+                try { cb.Invoke((list, unit)); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEnterBatch"); }
+            }
         }
         finally { ListPool<long>.Return(list); }
     }
@@ -510,16 +473,18 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
     private void FireBatchLeave(long[] watcherIds, IUnit unit)
     {
         if (watcherIds.Length == 0) return;
-        var cb = _channel.OnUnitLeaveBatch;
-        var after = _channel.AfterBatchLeave;
-        if (cb == null && after == null) return;
+        var cbs = _channel.SnapshotOnUnitLeaveBatch();
+        if (cbs.Count == 0) return;
 
         var list = ListPool<long>.Rent();
         list.AddRange(watcherIds);
         try
         {
-            if (cb != null) { try { cb.Invoke((list, unit)); } catch (Exception ex) { PubSubLog.Error(ex, "OnUnitLeaveBatch"); } }
-            if (after != null) { try { after.Invoke(unit, list); } catch (Exception ex) { PubSubLog.Error(ex, "AfterBatchLeave"); } }
+            foreach (var cb in cbs)
+            {
+                try { cb.Invoke((list, unit)); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnUnitLeaveBatch"); }
+            }
         }
         finally { ListPool<long>.Return(list); }
     }
@@ -527,26 +492,30 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
     private void FireSyncEnter(long watcherId, List<IUnit> units)
     {
         if (units.Count == 0) return;
-        var cb = _channel.OnUnitEnterSync;
-        var after = _channel.AfterSyncEnter;
-        if (cb == null && after == null) return;
-        if (cb != null) { try { cb.Invoke((watcherId, units)); } catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEnterSync"); } }
-        if (after != null) { try { after.Invoke(watcherId, units); } catch (Exception ex) { PubSubLog.Error(ex, "AfterSyncEnter"); } }
+        var cbs = _channel.SnapshotOnUnitEnterSync();
+        if (cbs.Count == 0) return;
+        foreach (var cb in cbs)
+        {
+            try { cb.Invoke((watcherId, units)); }
+            catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEnterSync"); }
+        }
     }
 
     private void FireSyncLeave(long watcherId, UnitKey[] unitKeys)
     {
         if (unitKeys.Length == 0) return;
-        var cb = _channel.OnUnitLeaveSync;
-        var after = _channel.AfterSyncLeave;
-        if (cb == null && after == null) return;
+        var cbs = _channel.SnapshotOnUnitLeaveSync();
+        if (cbs.Count == 0) return;
 
         var list = ListPool<UnitKey>.Rent();
         list.AddRange(unitKeys);
         try
         {
-            if (cb != null) { try { cb.Invoke((watcherId, list)); } catch (Exception ex) { PubSubLog.Error(ex, "OnUnitLeaveSync"); } }
-            if (after != null) { try { after.Invoke(watcherId, list); } catch (Exception ex) { PubSubLog.Error(ex, "AfterSyncLeave"); } }
+            foreach (var cb in cbs)
+            {
+                try { cb.Invoke((watcherId, list)); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnUnitLeaveSync"); }
+            }
         }
         finally { ListPool<UnitKey>.Return(list); }
     }
@@ -554,16 +523,18 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
     private void FireUnitEvent(long[] watcherIds, IUnit unit, string eventName, object? data, bool reliable)
     {
         if (watcherIds.Length == 0) return;
-        var cb = _channel.OnUnitEvent;
-        var after = _channel.AfterUnitEvent;
-        if (cb == null && after == null) return;
+        var cbs = _channel.SnapshotOnUnitEvent();
+        if (cbs.Count == 0) return;
 
         var list = ListPool<long>.Rent();
         list.AddRange(watcherIds);
         try
         {
-            if (cb != null) { try { cb.Invoke((list, unit, eventName, data!, reliable)); } catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEvent"); } }
-            if (after != null) { try { after.Invoke(unit, list, eventName, data, reliable); } catch (Exception ex) { PubSubLog.Error(ex, "AfterUnitEvent"); } }
+            foreach (var cb in cbs)
+            {
+                try { cb.Invoke((list, unit, eventName, data!, reliable)); }
+                catch (Exception ex) { PubSubLog.Error(ex, "OnUnitEvent"); }
+            }
         }
         finally { ListPool<long>.Return(list); }
     }

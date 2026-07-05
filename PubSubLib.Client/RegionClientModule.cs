@@ -73,14 +73,14 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
         if (_units.ContainsKey(key))
             return;
 
-        var wrapper = factory.CreateWrapper();
+        var wrapper =         factory.CreateWrapper();
         var internalWrapper = (IRegionClientUnitInternal)wrapper;
 
         internalWrapper.Init(evt.UnitId,
             new Vector2 { x = evt.PosX, y = evt.PosY });
 
-        factory.CreateTarget(wrapper);
-        var target = internalWrapper.GetTarget();
+        var target = factory.CreateTarget(wrapper);
+        internalWrapper.SetTarget((IAlive)target);
 
         if (target is not IAlive aliveTarget || !aliveTarget.IsAlive)
             return;
@@ -233,7 +233,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void OnCreateUnit<T, TR>(Func<T, TR> unit)
-        where T : IRegionUnit<TR>
+        where T : class, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -242,7 +242,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
         _factories[unitType] = new RegionUnitFactory(
             () => Activator.CreateInstance<T>(),
-            w => { unit((T)w); },
+            w => unit((T)w),
             (w, t) =>
             {
                 if (t is ISetRegionUnit<T, TR> su)
@@ -254,7 +254,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public T GetUnit<T, TR>(long id)
-        where T : IRegionUnit<TR>
+        where T : class, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -269,7 +269,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public IList<T> GetUnits<T, TR>()
-        where T : IRegionUnit<TR>
+        where T : class, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -286,7 +286,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void Destroy<T, TR>(T unit)
-        where T : IRegionUnit<TR>
+        where T : class
         where TR : class, IAlive
     {
         var internalWrapper = (IRegionClientUnitInternal)unit;
@@ -393,12 +393,12 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     private sealed class RegionUnitFactory
     {
         private readonly Func<object> _createWrapper;
-        private readonly Action<object> _createTarget;
+        private readonly Func<object, object> _createTarget;
         private readonly Action<object, object> _onSetup;
 
         public RegionUnitFactory(
             Func<object> createWrapper,
-            Action<object> createTarget,
+            Func<object, object> createTarget,
             Action<object, object> onSetup)
         {
             _createWrapper = createWrapper;
@@ -408,7 +408,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
         public object CreateWrapper() => _createWrapper();
 
-        public void CreateTarget(object wrapper) => _createTarget(wrapper);
+        public object CreateTarget(object wrapper) => _createTarget(wrapper);
 
         public void OnSetup(object wrapper, object target) => _onSetup(wrapper, target);
     }
