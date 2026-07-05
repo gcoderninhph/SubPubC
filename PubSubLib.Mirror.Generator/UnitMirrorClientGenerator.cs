@@ -38,12 +38,17 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             return null;
 
         string? unitType = null;
+        string? targetTypeFullName = null;
         foreach (var namedArg in attr.NamedArguments)
         {
             if (namedArg.Key == "UnitType" && namedArg.Value.Value is string ut)
                 unitType = ut;
+            if (namedArg.Key == "Target" && namedArg.Value.Value is INamedTypeSymbol targetType)
+                targetTypeFullName = targetType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .TrimStartGlobalPrefix();
         }
         unitType ??= protoType.Name;
+        targetTypeFullName ??= "global::PubSubLib.Client.IAlive";
 
         var ns = classSymbol.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .TrimStartGlobalPrefix() ?? "";
@@ -95,7 +100,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             }
         }
 
-        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, fields.ToArray(), structGroups);
+        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, targetTypeFullName, fields.ToArray(), structGroups);
     }
 
     private static string ToFieldName(string propertyName)
@@ -122,7 +127,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             sb.AppendLine($"namespace {info.Namespace}");
             sb.AppendLine("{");
         }
-        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Client.IRegionUnit, global::PubSubLib.Client.IRegionClientUnitInternal");
+        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Client.IRegionUnit<{info.TargetTypeFullName}>, global::PubSubLib.Client.IRegionClientUnitInternal");
         sb.AppendLine("{");
 
         sb.AppendLine($"    public static string _unitType = \"{info.UnitType}\";");
@@ -130,9 +135,11 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("    private long _id;");
         sb.AppendLine("    private global::PubSubLib.Vector2 _position;");
-        sb.AppendLine("    private global::PubSubLib.Client.IAlive _target;");
+        sb.AppendLine("    private object _target;");
         sb.AppendLine();
         sb.AppendLine("    public long Id => _id;");
+        sb.AppendLine();
+        sb.AppendLine($"    public {info.TargetTypeFullName} GetTarget() => ({info.TargetTypeFullName})_target;");
         sb.AppendLine();
         sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.Init(long id, global::PubSubLib.Vector2 position)");
         sb.AppendLine("    {");
@@ -140,8 +147,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine("        _position = position;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.SetTarget(global::PubSubLib.Client.IAlive target) => _target = target;");
-        sb.AppendLine("    global::PubSubLib.Client.IAlive global::PubSubLib.Client.IRegionClientUnitInternal.GetTarget() => _target;");
+        sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.SetTarget(object target) => _target = target;");
         sb.AppendLine();
 
         sb.AppendLine($"    private {info.ProtoTypeFullName}? _mirrorProto;");

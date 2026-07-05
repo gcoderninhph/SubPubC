@@ -13,6 +13,17 @@ using ClientAlive = PubSubLib.Client.IAlive;
 namespace PubSubLibTest;
 
 // ===== Real Natify Integration Tests =====
+
+[UnitMirrorClient(typeof(RemoveWatcherCmd), UnitType = "remove_watcher", Target = typeof(RemoveWatcherTarget))]
+public partial class RemoveWatcherUnitClient
+{
+}
+
+[UnitMirrorClient(typeof(RemoveWatcherCmd), UnitType = "remove_watcher", Target = typeof(TrackedTarget))]
+public partial class TrackedWatcherUnitClient
+{
+}
+
 public class RegionTestFullStack : IDisposable
 {
     private const string NatsUrl = "nats://localhost:4222";
@@ -74,7 +85,7 @@ public class RegionTestFullStack : IDisposable
             var spl = body.Value.Split('_');
             var user = spl[0];
             var id = spl[1];
-            return Task.FromResult<IUser>(new Player(id, user));
+            return Task.FromResult<IUser>(new RegionPlayer(id, user));
         });
         _serverConn.AddModule(IRegionRouterModule.Create(_natifyServer, "VN"));
     }
@@ -320,7 +331,7 @@ public class RegionTestFullStack : IDisposable
         CreateUnityServer();
         var ctx = await CreateClient("multi", 1);
 
-        ctx.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        ctx.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             ctx.Targets[wrapper.Id] = t;
@@ -343,7 +354,7 @@ public class RegionTestFullStack : IDisposable
         }
 
         await Task.Delay(500);
-        var units = ctx.RegionClientModule.GetUnits<RemoveWatcherUnitClient, TrackedTarget>();
+        var units = ctx.RegionClientModule.GetUnits<TrackedWatcherUnitClient, TrackedTarget>();
         Assert.Equal(unitCount, units.Count);
         var ids = new HashSet<long>(units.Select(u => u.Id));
         for (long i = 1; i <= unitCount; i++)
@@ -364,7 +375,7 @@ public class RegionTestFullStack : IDisposable
 
         foreach (var ctx in new[] { clientA, clientB, clientC })
         {
-            ctx.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+            ctx.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
             {
                 var t = new TrackedTarget();
                 ctx.Targets[wrapper.Id] = t;
@@ -390,7 +401,7 @@ public class RegionTestFullStack : IDisposable
 
         static HashSet<long> AliveIds(IRegionClientModule mod)
         {
-            var units = mod.GetUnits<RemoveWatcherUnitClient, TrackedTarget>();
+            var units = mod.GetUnits<TrackedWatcherUnitClient, TrackedTarget>();
             return new HashSet<long>(units.Select(u => u.Id));
         }
 
@@ -424,7 +435,7 @@ public class RegionTestFullStack : IDisposable
         var createSigsA = new Dictionary<long, ManualResetEventSlim>();
         var createSigsB = new Dictionary<long, ManualResetEventSlim>();
 
-        clientA.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientA.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientA.Targets[wrapper.Id] = t;
@@ -433,7 +444,7 @@ public class RegionTestFullStack : IDisposable
             return t;
         });
 
-        clientB.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientB.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientB.Targets[wrapper.Id] = t;
@@ -462,7 +473,7 @@ public class RegionTestFullStack : IDisposable
         Assert.True(createSigsB[2].Wait(10000), "B did not see unit 2");
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         var aInit = Alive(clientA.RegionClientModule);
         Assert.True(aInit.Contains(1L));
@@ -503,7 +514,7 @@ public class RegionTestFullStack : IDisposable
 
         var ctx = await CreateClient("player", 1);
 
-        ctx.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        ctx.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             ctx.Targets[wrapper.Id] = t;
@@ -517,7 +528,7 @@ public class RegionTestFullStack : IDisposable
         await Task.Delay(2500);
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         // Create unit at (0,0) — outside watcher range (cells 1-3, x∈[100,400))
         var unit = await CreateUnit(1, V(0, 0));
@@ -552,14 +563,14 @@ public class RegionTestFullStack : IDisposable
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
 
-        clientA.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientA.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientA.Targets[wrapper.Id] = t;
             return t;
         });
 
-        clientB.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientB.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientB.Targets[wrapper.Id] = t;
@@ -575,7 +586,7 @@ public class RegionTestFullStack : IDisposable
         await Task.Delay(2500);
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         // Create unit at (100,0) → cell 1 → only A covers it
         var unit = await CreateUnit(1, V(100, 0));
@@ -608,14 +619,14 @@ public class RegionTestFullStack : IDisposable
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
 
-        clientA.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientA.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientA.Targets[wrapper.Id] = t;
             return t;
         });
 
-        clientB.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientB.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientB.Targets[wrapper.Id] = t;
@@ -631,7 +642,7 @@ public class RegionTestFullStack : IDisposable
         await Task.Delay(2500);
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         // Phase 1: unit at (100,0) → only A sees it
         var unit = await CreateUnit(1, V(100, 0));
@@ -675,7 +686,7 @@ public class RegionTestFullStack : IDisposable
         var clientA = await CreateClient("player", 1);
         var createSigsA = new Dictionary<long, ManualResetEventSlim>();
 
-        clientA.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+        clientA.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
         {
             var t = new TrackedTarget();
             clientA.Targets[wrapper.Id] = t;
@@ -691,7 +702,7 @@ public class RegionTestFullStack : IDisposable
         await Task.Delay(2500);
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         // Create unit at (100,0) → watcher A covers it
         createSigsA[1] = new ManualResetEventSlim();
@@ -756,7 +767,7 @@ public class RegionTestFullStack : IDisposable
         foreach (var cl in clients)
         {
             var ctx = cl;
-            ctx.RegionClientModule.OnCreateUnit<RemoveWatcherUnitClient, TrackedTarget>(wrapper =>
+            ctx.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
             {
                 var t = new TrackedTarget();
                 ctx.Targets[wrapper.Id] = t;
@@ -774,7 +785,7 @@ public class RegionTestFullStack : IDisposable
         await Task.Delay(2500);
 
         static List<long> Alive(IRegionClientModule m) =>
-            m.GetUnits<RemoveWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
+            m.GetUnits<TrackedWatcherUnitClient, TrackedTarget>().Select(u => u.Id).ToList();
 
         // Create 5 units at various positions
         var unit1 = await CreateUnit(1, V(0, 0));
@@ -856,10 +867,11 @@ public class RegionTestFullStack : IDisposable
             try { await Task.Delay(10, ct); } catch { break; }
         }
     }
+}
 
-    // ===== Target classes =====
+// ===== Target classes =====
 
-    internal sealed class ServerTarget : ServerAlive, PubSubLib.ISetRegionUnit<RemoveWatcherUnitServer, ServerTarget>, IRegionUnitOnStart, IRegionUnitOnDestroy
+internal sealed class ServerTarget : ServerAlive, PubSubLib.ISetRegionUnit<RemoveWatcherUnitServer, ServerTarget>, IRegionUnitOnStart, IRegionUnitOnDestroy
     {
         public bool IsAlive { get; set; } = true;
         public RemoveWatcherUnitServer? RegionUnit;
@@ -885,7 +897,7 @@ public class RegionTestFullStack : IDisposable
         }
     }
 
-    internal sealed class RemoveWatcherTarget : ClientAlive, PubSubLib.Client.ISetRegionUnit<RemoveWatcherUnitClient, RemoveWatcherTarget>, IRegionOnStart, IRegionOnDestroy, IRegionOnCommit
+    public sealed class RemoveWatcherTarget : ClientAlive, PubSubLib.Client.ISetRegionUnit<RemoveWatcherUnitClient, RemoveWatcherTarget>, IRegionOnStart, IRegionOnDestroy, IRegionOnCommit
     {
         public bool IsAlive { get; set; } = true;
         public RemoveWatcherUnitClient? RegionUnit;
@@ -931,11 +943,11 @@ public class RegionTestFullStack : IDisposable
         }
     }
 
-    internal sealed class TrackedTarget : ClientAlive, PubSubLib.Client.ISetRegionUnit<RemoveWatcherUnitClient, TrackedTarget>, IRegionOnStart, IRegionOnDestroy, IRegionOnCommit
+    public sealed class TrackedTarget : ClientAlive, PubSubLib.Client.ISetRegionUnit<TrackedWatcherUnitClient, TrackedTarget>, IRegionOnStart, IRegionOnDestroy, IRegionOnCommit
     {
         public bool IsAlive { get; set; } = true;
-        public RemoveWatcherUnitClient? RegionUnit;
-        public RemoveWatcherUnitClient? MirrorUnit;
+        public TrackedWatcherUnitClient? RegionUnit;
+        public TrackedWatcherUnitClient? MirrorUnit;
 
         public ManualResetEventSlim? CreateSignal;
         public ManualResetEventSlim? DestroySignal;
@@ -943,7 +955,7 @@ public class RegionTestFullStack : IDisposable
         public string? LastCommit;
         public int CommitCount;
 
-        public void SetRegionUnit(RemoveWatcherUnitClient region)
+        public void SetRegionUnit(TrackedWatcherUnitClient region)
         {
             RegionUnit = region;
             MirrorUnit = region;
@@ -966,9 +978,8 @@ public class RegionTestFullStack : IDisposable
         }
     }
 
-    internal sealed class Player(string id, string name) : IUser
+    internal sealed class RegionPlayer(string id, string name) : IUser
     {
         public string Name => name;
         public string Id => id;
     }
-}

@@ -4,6 +4,7 @@ namespace PubSubLib.Mirror;
 public sealed class UnitMirrorClientAttribute : Attribute
 {
     public Type ProtoType { get; }
+    public Type? Target { get; set; }
     public string? UnitType { get; set; }
     public UnitMirrorClientAttribute(Type protoType) => ProtoType = protoType;
 }

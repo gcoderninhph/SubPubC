@@ -95,7 +95,7 @@ public sealed class UnitMirrorGenerator : IIncrementalGenerator
             }
         }
 
-        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, fields.ToArray(), structGroups);
+        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, null, fields.ToArray(), structGroups);
     }
 
     private static string ToFieldName(string propertyName)
@@ -271,14 +271,16 @@ internal readonly struct UnitMirrorClassInfo
     public readonly string ClassName;
     public readonly string ProtoTypeFullName;
     public readonly string UnitType;
+    public readonly string? TargetTypeFullName;
     public readonly FieldMapping[] Fields;
     public readonly StructGroup[] StructGroups;
-    public UnitMirrorClassInfo(string ns, string className, string protoTypeFullName, string unitType, FieldMapping[] fields, StructGroup[] structGroups)
+    public UnitMirrorClassInfo(string ns, string className, string protoTypeFullName, string unitType, string? targetTypeFullName, FieldMapping[] fields, StructGroup[] structGroups)
     {
         Namespace = ns;
         ClassName = className;
         ProtoTypeFullName = protoTypeFullName;
         UnitType = unitType;
+        TargetTypeFullName = targetTypeFullName;
         Fields = fields;
         StructGroups = structGroups;
     }

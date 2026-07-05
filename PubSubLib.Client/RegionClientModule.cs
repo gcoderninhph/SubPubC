@@ -14,6 +14,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     private ISubscribe? _udpSubPubSub;
 
     private readonly Dictionary<(long Id, string Type), object> _units = new();
+    private readonly Dictionary<(long Id, string Type), IAlive> _targets = new();
     private readonly Dictionary<string, RegionUnitFactory> _factories = new();
 
     private long _watcherId;
@@ -80,7 +81,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
             new Vector2 { x = evt.PosX, y = evt.PosY });
 
         var target = factory.CreateTarget(wrapper);
-        internalWrapper.SetTarget((IAlive)target);
+        internalWrapper.SetTarget(target);
 
         if (target is not IAlive aliveTarget || !aliveTarget.IsAlive)
             return;
@@ -91,6 +92,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
             internalWrapper.ApplyUpdate(evt.Data.ToByteArray(), "");
 
         _units[key] = wrapper;
+        _targets[key] = aliveTarget;
     }
 
     private void HandleDestroyUnit(DestroyUnitEvt evt)
@@ -100,16 +102,14 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
     private void DestroyUnitInternal((long Id, string Type) key)
     {
-        if (!_units.TryGetValue(key, out var obj))
+        if (!_units.TryGetValue(key, out _))
             return;
 
-        var internalWrapper = (IRegionClientUnitInternal)obj;
-        var target = internalWrapper.GetTarget();
-
-        if (target is IRegionOnDestroy od)
+        if (_targets.TryGetValue(key, out var target) && target is IRegionOnDestroy od)
             od.OnDestroyUnit();
 
         _units.Remove(key);
+        _targets.Remove(key);
     }
 
     private void OnPubSubEvent(PubSubEvent evt)
@@ -215,8 +215,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
                     var commit = RegionCommit.Parser.ParseFrom(msg.Data);
                     internalWrapper.ApplyUpdate(commit.MirrorData.ToByteArray(), commit.Commit);
 
-                    var target = internalWrapper.GetTarget();
-                    if (target is IRegionOnCommit oc)
+                    if (_targets.TryGetValue(key, out var t) && t is IRegionOnCommit oc)
                         oc.OnCommitUnit(commit.Commit);
                 }
                 catch (Exception ex) { PubSubLog.Error(ex, "HandleUnitEvent commit failed"); }
@@ -233,7 +232,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void OnCreateUnit<T, TR>(Func<T, TR> unit)
-        where T : class, IRegionUnit, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -253,7 +252,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public T GetUnit<T, TR>(long id)
-        where T : class, IRegionUnit, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -267,7 +266,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public IList<T> GetUnits<T, TR>()
-        where T : class, IRegionUnit, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
@@ -283,7 +282,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void Destroy<T, TR>(T unit)
-        where T : class, IRegionUnit
+        where T : class, IRegionUnit<TR>
         where TR : class, IAlive
     {
         var key = (unit.Id, unit.UnitType);
@@ -358,24 +357,18 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     private void CleanDeadUnits()
     {
         var deadKeys = new List<(long, string)>();
-        foreach (var (key, obj) in _units)
+        foreach (var (key, target) in _targets)
         {
-            var internalWrapper = (IRegionClientUnitInternal)obj;
-            var target = internalWrapper.GetTarget();
-            if (target == null || !target.IsAlive)
+            if (!target.IsAlive)
                 deadKeys.Add(key);
         }
 
         foreach (var key in deadKeys)
         {
-            if (_units.TryGetValue(key, out var obj))
-            {
-                var internalWrapper = (IRegionClientUnitInternal)obj;
-                var target = internalWrapper.GetTarget();
-                if (target is IRegionOnDestroy od)
-                    od.OnDestroyUnit();
-            }
+            if (_targets.TryGetValue(key, out var target) && target is IRegionOnDestroy od)
+                od.OnDestroyUnit();
             _units.Remove(key);
+            _targets.Remove(key);
         }
     }
 

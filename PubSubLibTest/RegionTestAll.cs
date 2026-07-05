@@ -11,8 +11,8 @@ public partial class RemoveWatcherUnitServer
 {
 }
 
-[UnitMirrorClient(typeof(RemoveWatcherCmd), UnitType = "remove_watcher")]
-public partial class RemoveWatcherUnitClient
+[UnitMirrorClient(typeof(RemoveWatcherCmd), UnitType = "remove_watcher", Target = typeof(RemoveWatcherClientTarget))]
+public partial class RemoveWatcherTestClient
 {
 }
 
@@ -43,15 +43,24 @@ public class RegionTestAll
     [Fact]
     public void Generated_UnitMirrorClient_Implements_IRegionUnit_And_IRegionClientUnitInternal()
     {
-        var unit = new RemoveWatcherUnitClient();
-        Assert.IsAssignableFrom<IRegionUnit>(unit);
+        var unit = new RemoveWatcherTestClient();
+        Assert.IsAssignableFrom<PubSubLib.Client.IRegionUnit<RemoveWatcherClientTarget>>(unit);
         Assert.IsAssignableFrom<IRegionClientUnitInternal>(unit);
+    }
+
+    [Fact]
+    public void Generated_UnitMirrorClient_GetTarget_ReturnsTypedTarget()
+    {
+        var unit = new RemoveWatcherTestClient();
+        var target = new RemoveWatcherClientTarget();
+        ((IRegionClientUnitInternal)unit).SetTarget(target);
+        Assert.Same(target, unit.GetTarget());
     }
 
     [Fact]
     public void Generated_UnitMirrorClient_Has_Id_And_UnitType()
     {
-        var unit = new RemoveWatcherUnitClient();
+        var unit = new RemoveWatcherTestClient();
         Assert.Equal("remove_watcher", unit.UnitType);
         Assert.Equal(0, unit.Id);
     }
@@ -190,7 +199,7 @@ public class RegionTestAll
     [Fact]
     public void Generated_UnitMirrorClient_ApplyUpdate_SyncsMirrorFields()
     {
-        var unit = new RemoveWatcherUnitClient();
+        var unit = new RemoveWatcherTestClient();
 
         var cmd = new RemoveWatcherCmd { WatcherId = 55 };
         var bytes = cmd.ToByteArray();
@@ -203,7 +212,7 @@ public class RegionTestAll
     [Fact]
     public void Generated_UnitMirrorClient_ApplyUpdate_FirstTimeCallsOnStart()
     {
-        var unit = new RemoveWatcherUnitClient();
+        var unit = new RemoveWatcherTestClient();
 
         var cmd = new RemoveWatcherCmd { WatcherId = 1 };
         var bytes = cmd.ToByteArray();
@@ -215,7 +224,7 @@ public class RegionTestAll
     [Fact]
     public void Generated_UnitMirrorClient_Init_SetsIdAndPosition()
     {
-        var unit = new RemoveWatcherUnitClient();
+        var unit = new RemoveWatcherTestClient();
 
         ((IRegionClientUnitInternal)unit).Init(42, new Vector2 { x = 10, y = 20 });
 
@@ -225,7 +234,7 @@ public class RegionTestAll
     [Fact]
     public void Generated_UnitMirrorClient_GetUnitType_Static()
     {
-        Assert.Equal("remove_watcher", RemoveWatcherUnitClient._unitType);
+        Assert.Equal("remove_watcher", RemoveWatcherTestClient._unitType);
     }
 
     [Fact]
@@ -286,4 +295,9 @@ public class RegionTestAll
             IsDestroyed = true;
         }
     }
+}
+
+public sealed class RemoveWatcherClientTarget : PubSubLib.Client.IAlive
+{
+    public bool IsAlive { get; set; } = true;
 }
