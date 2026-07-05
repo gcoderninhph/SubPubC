@@ -11,9 +11,6 @@ public interface IRegionNatifyClient : IDisposable
         return new RegionNatifyClient(server, regionId);
     }
 
-    void OnCreateUnitEvt(Action<CreateUnitEvt> callback);
-    void OnDestroyUnitEvt(Action<DestroyUnitEvt> callback);
-
     void SendAddWatcher(AddWatcherCmd cmd);
     void SendRemoveWatcher(RemoveWatcherCmd cmd);
     void SendMoveWatcher(MoveWatcherCmd cmd);

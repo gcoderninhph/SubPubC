@@ -9,7 +9,6 @@ namespace PubSubLib.Client;
 internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 {
     private IClient? _client;
-    private ISubscribe? _tcpSubRegion;
     private ISubscribe? _tcpSubPubSub;
     private ISubscribe? _udpSubPubSub;
 
@@ -34,8 +33,6 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     {
         _client = client;
 
-        _tcpSubRegion = client.SubscribeTcp<RegionEvent>("Region.Evt", OnRegionEvent);
-
         _tcpSubPubSub = client.SubscribeTcp<PubSubEvent>("PubSub.Evt",
             evt => OnPubSubEvent(evt));
 
@@ -46,23 +43,6 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     private bool TryParseWatcherId()
     {
         return true;
-    }
-
-    private void OnRegionEvent(RegionEvent evt)
-    {
-        try
-        {
-            switch (evt.EvtCase)
-            {
-                case RegionEvent.EvtOneofCase.CreateUnit:
-                    HandleCreateUnit(evt.CreateUnit);
-                    break;
-                case RegionEvent.EvtOneofCase.DestroyUnit:
-                    HandleDestroyUnit(evt.DestroyUnit);
-                    break;
-            }
-        }
-        catch (Exception ex) { PubSubLog.Error(ex, "RegionClientModule.OnRegionEvent failed"); }
     }
 
     private void HandleCreateUnit(CreateUnitEvt evt)
@@ -93,11 +73,6 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
         _units[key] = wrapper;
         _targets[key] = aliveTarget;
-    }
-
-    private void HandleDestroyUnit(DestroyUnitEvt evt)
-    {
-        DestroyUnitInternal((evt.UnitId, evt.UnitType));
     }
 
     private void DestroyUnitInternal((long Id, string Type) key)
@@ -374,7 +349,6 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
     public void Dispose()
     {
-        _tcpSubRegion?.UnSubscribe();
         _tcpSubPubSub?.UnSubscribe();
         _udpSubPubSub?.UnSubscribe();
     }

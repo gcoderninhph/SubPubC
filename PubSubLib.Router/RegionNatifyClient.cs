@@ -9,12 +9,8 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
     private readonly NatifyServer _server;
     private readonly string _regionId;
 
-    private const string RegionEvtTopic = "Region.Evt";
     private const string PubSubCmdTopic = "PubSub.Cmd";
     private const string PubSubEvtTopic = "PubSub.Evt";
-
-    private Action<CreateUnitEvt>? _onCreateUnitEvt;
-    private Action<DestroyUnitEvt>? _onDestroyUnitEvt;
 
     private Action<BatchEnterMsg>? _onBatchEnter;
     private Action<BatchLeaveMsg>? _onBatchLeave;
@@ -26,24 +22,7 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
     {
         _server = server;
         _regionId = regionId;
-        _server.OnMessage<RegionEvent>(RegionEvtTopic, OnRegionEvent);
         _server.OnMessage<PubSubEvent>(PubSubEvtTopic, OnPubSubEvent);
-    }
-
-    // ===== Region event handler =====
-
-    private void OnRegionEvent((string regionId, Data<RegionEvent> data) args)
-    {
-        var evt = args.data.Value;
-        switch (evt.EvtCase)
-        {
-            case RegionEvent.EvtOneofCase.CreateUnit:
-                _onCreateUnitEvt?.Invoke(evt.CreateUnit);
-                break;
-            case RegionEvent.EvtOneofCase.DestroyUnit:
-                _onDestroyUnitEvt?.Invoke(evt.DestroyUnit);
-                break;
-        }
     }
 
     // ===== PubSub event handler =====
@@ -92,11 +71,6 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
     {
         _server.Publish(PubSubCmdTopic, _regionId, new PubSubCommand { PingUnits = cmd });
     }
-
-    // ===== Region callback registration =====
-
-    public void OnCreateUnitEvt(Action<CreateUnitEvt> callback) { _onCreateUnitEvt = callback; }
-    public void OnDestroyUnitEvt(Action<DestroyUnitEvt> callback) { _onDestroyUnitEvt = callback; }
 
     // ===== PubSub callback registration =====
 

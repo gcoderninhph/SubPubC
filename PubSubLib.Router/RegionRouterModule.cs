@@ -53,8 +53,6 @@ internal sealed class RegionRouterModule : IRegionRouterModule
 
         server.SubscribeUdp<PubSubCommand>("PubSub.Cmd", OnPubSubCommand);
 
-        _natifyClient.OnCreateUnitEvt(OnCreateUnitEvt);
-        _natifyClient.OnDestroyUnitEvt(OnDestroyUnitEvt);
         _natifyClient.OnBatchEnter(OnBatchEnter);
         _natifyClient.OnBatchLeave(OnBatchLeave);
         _natifyClient.OnSyncEnter(OnSyncEnter);
@@ -88,30 +86,6 @@ internal sealed class RegionRouterModule : IRegionRouterModule
                 cmd.PingUnits.WatcherId = watcherId;
                 _natifyClient.SendPingUnits(cmd.PingUnits);
                 break;
-        }
-    }
-
-    // ===== Outbound Region events (broadcast all) =====
-
-    private void OnCreateUnitEvt(CreateUnitEvt evt)
-    {
-        if (_server == null) return;
-
-        foreach (var (watcherId, conn) in _connections)
-        {
-            if (conn.Connected)
-                _server.SendOnTcp("Region.Evt", conn, new RegionEvent { CreateUnit = evt });
-        }
-    }
-
-    private void OnDestroyUnitEvt(DestroyUnitEvt evt)
-    {
-        if (_server == null) return;
-
-        foreach (var (watcherId, conn) in _connections)
-        {
-            if (conn.Connected)
-                _server.SendOnTcp("Region.Evt", conn, new RegionEvent { DestroyUnit = evt });
         }
     }
 
