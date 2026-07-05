@@ -233,12 +233,11 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void OnCreateUnit<T, TR>(Func<T, TR> unit)
-        where T : class, new()
+        where T : class, IRegionUnit, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
-        var internalWrapper = (IRegionClientUnitInternal)temp!;
-        var unitType = internalWrapper.GetUnitType();
+        var unitType = temp.UnitType;
 
         _factories[unitType] = new RegionUnitFactory(
             () => Activator.CreateInstance<T>(),
@@ -254,12 +253,11 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public T GetUnit<T, TR>(long id)
-        where T : class, new()
+        where T : class, IRegionUnit, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
-        var internalWrapper = (IRegionClientUnitInternal)temp!;
-        var unitType = internalWrapper.GetUnitType();
+        var unitType = temp.UnitType;
         var key = (id, unitType);
 
         if (_units.TryGetValue(key, out var obj) && obj is T t)
@@ -269,12 +267,11 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public IList<T> GetUnits<T, TR>()
-        where T : class, new()
+        where T : class, IRegionUnit, new()
         where TR : class, IAlive
     {
         var temp = Activator.CreateInstance<T>();
-        var internalWrapper = (IRegionClientUnitInternal)temp!;
-        var unitType = internalWrapper.GetUnitType();
+        var unitType = temp.UnitType;
 
         var result = new List<T>();
         foreach (var kvp in _units)
@@ -286,11 +283,10 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     }
 
     public void Destroy<T, TR>(T unit)
-        where T : class
+        where T : class, IRegionUnit
         where TR : class, IAlive
     {
-        var internalWrapper = (IRegionClientUnitInternal)unit;
-        var key = (internalWrapper.GetId(), internalWrapper.GetUnitType());
+        var key = (unit.Id, unit.UnitType);
         DestroyUnitInternal(key);
     }
 

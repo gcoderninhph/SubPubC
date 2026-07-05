@@ -122,7 +122,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             sb.AppendLine($"namespace {info.Namespace}");
             sb.AppendLine("{");
         }
-        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Client.IRegionClientUnitInternal");
+        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.Client.IRegionUnit, global::PubSubLib.Client.IRegionClientUnitInternal");
         sb.AppendLine("{");
 
         sb.AppendLine($"    public static string _unitType = \"{info.UnitType}\";");
@@ -140,10 +140,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine("        _position = position;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    long global::PubSubLib.Client.IRegionClientUnitInternal.GetId() => _id;");
-        sb.AppendLine();
         sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.SetTarget(global::PubSubLib.Client.IAlive target) => _target = target;");
-        sb.AppendLine("    string global::PubSubLib.Client.IRegionClientUnitInternal.GetUnitType() => _unitType;");
         sb.AppendLine("    global::PubSubLib.Client.IAlive global::PubSubLib.Client.IRegionClientUnitInternal.GetTarget() => _target;");
         sb.AppendLine();
 

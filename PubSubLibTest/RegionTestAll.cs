@@ -41,18 +41,19 @@ public class RegionTestAll
     }
 
     [Fact]
-    public void Generated_UnitMirrorClient_Implements_IRegionClientUnitInternal()
+    public void Generated_UnitMirrorClient_Implements_IRegionUnit_And_IRegionClientUnitInternal()
     {
         var unit = new RemoveWatcherUnitClient();
+        Assert.IsAssignableFrom<IRegionUnit>(unit);
         Assert.IsAssignableFrom<IRegionClientUnitInternal>(unit);
     }
 
     [Fact]
-    public void Generated_UnitMirrorClient_Has_UnitType()
+    public void Generated_UnitMirrorClient_Has_Id_And_UnitType()
     {
         var unit = new RemoveWatcherUnitClient();
         Assert.Equal("remove_watcher", unit.UnitType);
-        Assert.Equal("remove_watcher", ((IRegionClientUnitInternal)unit).GetUnitType());
+        Assert.Equal(0, unit.Id);
     }
 
     [Fact]
@@ -218,7 +219,7 @@ public class RegionTestAll
 
         ((IRegionClientUnitInternal)unit).Init(42, new Vector2 { x = 10, y = 20 });
 
-        Assert.Equal(42, ((IRegionClientUnitInternal)unit).GetId());
+        Assert.Equal(42, unit.Id);
     }
 
     [Fact]
