@@ -9,7 +9,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 {
     private readonly IPubSub _pubSub;
     private readonly INatifyAdapter? _natifyAdapter;
-    private readonly RegionNatifySync? _regionSync;
     private readonly Dictionary<UnitKey, object> _units = new();
     private readonly Dictionary<string, Delegate> _factories = new();
     private ISubscrible? _subBatchEnter;
@@ -29,9 +28,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         {
             _natifyAdapter = new NatifyAdapter(config.NatifyClient);
 
-            _regionSync = new RegionNatifySync(_natifyAdapter, this);
-            _regionSync.OnCreateUnitCmd(HandleCreateUnitCmd);
-            _regionSync.OnDestroyUnitCmd(HandleDestroyUnitCmd);
+            _natifyAdapter.Subscribe<RegionCommand>("Region.Cmd", OnRegionCommand);
 
             _natifyAdapter.Subscribe<PubSubCommand>(PubSubCmdTopic, OnPubSubCommand);
 
@@ -80,6 +77,24 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         var unit = _pubSub.GetUnitOfByType(cmd.UnitType, cmd.UnitId);
         if (unit != null)
             unit.Destroy();
+    }
+
+    private void OnRegionCommand(Data<RegionCommand> data)
+    {
+        try
+        {
+            var cmd = data.Value;
+            switch (cmd.CmdCase)
+            {
+                case RegionCommand.CmdOneofCase.CreateUnit:
+                    HandleCreateUnitCmd(cmd.CreateUnit);
+                    break;
+                case RegionCommand.CmdOneofCase.DestroyUnit:
+                    HandleDestroyUnitCmd(cmd.DestroyUnit);
+                    break;
+            }
+        }
+        catch (Exception ex) { PubSubLog.Error(ex, "RegionModule.OnRegionCommand failed"); }
     }
 
     // ===== Inbound PubSub commands =====
@@ -256,15 +271,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 
             _units[new UnitKey(id, unitType)] = wrapper;
 
-            _regionSync?.PublishCreateUnit(new CreateUnitEvt
-            {
-                UnitId = id,
-                UnitType = unitType,
-                PosX = position.x,
-                PosY = position.y,
-                Data = ByteString.CopyFrom(iu.Data ?? Array.Empty<byte>())
-            });
-
             tcs.SetResult(wrapper);
         });
 
@@ -354,12 +360,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
             iu.Destroy();
 
         _units.Remove(key);
-
-        _regionSync?.PublishDestroyUnit(new DestroyUnitEvt
-        {
-            UnitId = id,
-            UnitType = unitType
-        });
     }
 
     public void Dispose()
@@ -369,7 +369,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         _subSyncEnter?.UnSubscribe();
         _subSyncLeave?.UnSubscribe();
         _subUnitEvent?.UnSubscribe();
-        _regionSync?.Dispose();
         _pubSub.Dispose();
         _natifyAdapter?.Dispose();
     }
