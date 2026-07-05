@@ -28,8 +28,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         {
             _natifyAdapter = new NatifyAdapter(config.NatifyClient);
 
-            _natifyAdapter.Subscribe<RegionCommand>("Region.Cmd", OnRegionCommand);
-
             _natifyAdapter.Subscribe<PubSubCommand>(PubSubCmdTopic, OnPubSubCommand);
 
             Action<(List<long> watcherIds, IUnit unit)> batchEnter = a => OnPubSubBatchEnter(a.unit, a.watcherIds);
@@ -77,24 +75,6 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         var unit = _pubSub.GetUnitOfByType(cmd.UnitType, cmd.UnitId);
         if (unit != null)
             unit.Destroy();
-    }
-
-    private void OnRegionCommand(Data<RegionCommand> data)
-    {
-        try
-        {
-            var cmd = data.Value;
-            switch (cmd.CmdCase)
-            {
-                case RegionCommand.CmdOneofCase.CreateUnit:
-                    HandleCreateUnitCmd(cmd.CreateUnit);
-                    break;
-                case RegionCommand.CmdOneofCase.DestroyUnit:
-                    HandleDestroyUnitCmd(cmd.DestroyUnit);
-                    break;
-            }
-        }
-        catch (Exception ex) { PubSubLog.Error(ex, "RegionModule.OnRegionCommand failed"); }
     }
 
     // ===== Inbound PubSub commands =====

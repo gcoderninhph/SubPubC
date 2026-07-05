@@ -9,7 +9,6 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
     private readonly NatifyServer _server;
     private readonly string _regionId;
 
-    private const string RegionCmdTopic = "Region.Cmd";
     private const string RegionEvtTopic = "Region.Evt";
     private const string PubSubCmdTopic = "PubSub.Cmd";
     private const string PubSubEvtTopic = "PubSub.Evt";
@@ -70,18 +69,6 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
                 _onUnitEvent?.Invoke(evt.UnitEvent);
                 break;
         }
-    }
-
-    // ===== Region send =====
-
-    public void SendCreateUnit(CreateUnitCmd cmd)
-    {
-        _server.Publish(RegionCmdTopic, _regionId, new RegionCommand { CreateUnit = cmd });
-    }
-
-    public void SendDestroyUnit(DestroyUnitCmd cmd)
-    {
-        _server.Publish(RegionCmdTopic, _regionId, new RegionCommand { DestroyUnit = cmd });
     }
 
     // ===== PubSub send =====

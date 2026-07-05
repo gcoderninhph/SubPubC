@@ -51,7 +51,6 @@ internal sealed class RegionRouterModule : IRegionRouterModule
             });
         });
 
-        server.SubscribeTcp<RegionCommand>("Region.Cmd", OnRegionCommand);
         server.SubscribeUdp<PubSubCommand>("PubSub.Cmd", OnPubSubCommand);
 
         _natifyClient.OnCreateUnitEvt(OnCreateUnitEvt);
@@ -61,24 +60,6 @@ internal sealed class RegionRouterModule : IRegionRouterModule
         _natifyClient.OnSyncEnter(OnSyncEnter);
         _natifyClient.OnSyncLeave(OnSyncLeave);
         _natifyClient.OnUnitEvent(OnUnitEvent);
-    }
-
-    // ===== Inbound Region commands =====
-
-    private void OnRegionCommand(IConnection conn, RegionCommand cmd)
-    {
-        if (!conn.Connected)
-            return;
-
-        switch (cmd.CmdCase)
-        {
-            case RegionCommand.CmdOneofCase.CreateUnit:
-                _natifyClient.SendCreateUnit(cmd.CreateUnit);
-                break;
-            case RegionCommand.CmdOneofCase.DestroyUnit:
-                _natifyClient.SendDestroyUnit(cmd.DestroyUnit);
-                break;
-        }
     }
 
     // ===== Inbound PubSub commands =====
