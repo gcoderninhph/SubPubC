@@ -1,6 +1,6 @@
 namespace PubSubLib.Client;
 
-internal interface IRegionClientUnitInternal
+public interface IRegionClientUnitInternal
 {
     void SetTarget(object target);
     void ApplyUpdate(byte[] mirrorData, string commit);
