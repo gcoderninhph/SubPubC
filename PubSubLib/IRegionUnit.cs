@@ -6,7 +6,7 @@ namespace PubSubLib;
 // đối tượng này sẽ được generate code và tự động triển khai bằng attribute UnitMirrorServer, attribute này sẽ có
 // logic mirror giống hệt với MirrorProto
 // đối tượng này sẽ giữ 1 IUnit bên trong nó
-public interface IRegionUnit<T>
+public interface IRegionUnit<TR>  where TR : IAlive
 {
     // # Luồng Start
     // khởi động ngay sau khi IRegionModule.CreateUnit/IRegionModule.CreateUnitAsync hoàn thành
@@ -32,7 +32,7 @@ public interface IRegionUnit<T>
     Vector2 Position { get; set; }
 
     // trả về đối tượng mà IUnit đang giữ và parse về đúng kiểu
-    T Get();
+    TR Get();
     
     // chuyển vào channel xử lý (MirrorProtoBus) -> ghi các thông tin vào protobuf mà nó mirror
     // -> tạo thành byte[] -> set byte[] cho IUnit -> đóng gói lại vào 1 proto commit mới
