@@ -23,6 +23,7 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
     private float? _lastSentRadius;
     private readonly int _pingIntervalMs;
     private long _lastPingTimestamp;
+    private bool _disposed;
 
     public RegionClientModule(Config config)
     {
@@ -349,8 +350,24 @@ internal sealed class RegionClientModule : IRegionClientModule, IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         _tcpSubPubSub?.UnSubscribe();
         _udpSubPubSub?.UnSubscribe();
+
+        foreach (var target in _targets.Values)
+            if (target is IRegionOnDestroy od)
+                od.OnDestroyUnit();
+
+        foreach (var wrapper in _units.Values)
+            if (wrapper is IRegionClientUnitInternal iu)
+                iu.DisposeMessageSubs();
+
+        _units.Clear();
+        _targets.Clear();
+        _factories.Clear();
+        _client = null;
     }
 
     private sealed class RegionUnitFactory

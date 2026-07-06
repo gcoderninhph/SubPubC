@@ -463,6 +463,11 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("    }");
         sb.AppendLine();
+        sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.DisposeMessageSubs()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        _msgHandlers.Clear();");
+        sb.AppendLine("    }");
+        sb.AppendLine();
 
         sb.AppendLine("    private sealed class __RegionMsgSub : MyConnection.ISubscribe");
         sb.AppendLine("    {");

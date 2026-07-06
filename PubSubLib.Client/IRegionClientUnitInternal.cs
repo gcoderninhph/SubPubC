@@ -6,4 +6,5 @@ internal interface IRegionClientUnitInternal
     void ApplyUpdate(byte[] mirrorData, string commit);
     void Init(long id, Vector2 position);
     void DispatchMessage(string subject, byte[] data);
+    void DisposeMessageSubs();
 }

@@ -2,7 +2,7 @@
 
 namespace PubSubLib.Client;
 
-public interface IRegionClientModule : IClientModule
+public interface IRegionClientModule : IClientModule, IDisposable
 {
     static IRegionClientModule Create(Config config)
     {
