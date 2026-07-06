@@ -10,6 +10,7 @@ public partial class RemoveWatcherMirror
 {
 }
 
+[Collection("MirrorProtoBus")]
 public class MirrorProtoTests
 {
     [Fact]

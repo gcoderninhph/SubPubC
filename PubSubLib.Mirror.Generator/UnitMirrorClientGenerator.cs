@@ -54,7 +54,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             .TrimStartGlobalPrefix() ?? "";
 
         var fields = new List<FieldMapping>();
-        var reserved = new HashSet<string> { "PlayerId", "IsOnLine", "DataName" };
+        var reserved = new HashSet<string> { "PlayerId", "IsOnLine", "DataName", "UnitType", "Id" };
 
         foreach (var member in protoType.GetMembers())
         {
@@ -100,7 +100,17 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             }
         }
 
-        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, targetTypeFullName, fields.ToArray(), structGroups);
+        var (vectorGroups, vectorGroupIndex) = MirrorProtoGenerator.DetectVectorGroups(fields);
+        for (int i = 0; i < fields.Count; i++)
+        {
+            if (vectorGroupIndex[i] >= 0)
+            {
+                var f = fields[i];
+                fields[i] = new FieldMapping(f.FieldName, f.PropertyName, f.TypeName, f.IsRepeated, f.ElementTypeName, f.IsReferenceType, f.StructGroupIndex, vectorGroupIndex[i]);
+            }
+        }
+
+        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, targetTypeFullName, fields.ToArray(), structGroups, vectorGroups);
     }
 
     private static string ToFieldName(string propertyName)
@@ -134,7 +144,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine($"    public string UnitType => _unitType;");
         sb.AppendLine();
         sb.AppendLine("    private long _id;");
-        sb.AppendLine("    private global::PubSubLib.Vector2 _position;");
+        sb.AppendLine("    private global::PubSubLib.Vector2 _regionPosition;");
         sb.AppendLine("    private object _target;");
         sb.AppendLine();
         sb.AppendLine("    public long Id => _id;");
@@ -144,7 +154,7 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.Init(long id, global::PubSubLib.Vector2 position)");
         sb.AppendLine("    {");
         sb.AppendLine("        _id = id;");
-        sb.AppendLine("        _position = position;");
+        sb.AppendLine("        _regionPosition = position;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    void global::PubSubLib.Client.IRegionClientUnitInternal.SetTarget(object target) => _target = target;");
@@ -165,9 +175,86 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
+        foreach (var sg in info.StructGroups)
+        {
+            sb.AppendLine();
+            var typeKeyword = sg.IsClass ? "class" : "struct";
+            sb.AppendLine($"    public {typeKeyword} {sg.StructName}");
+            sb.AppendLine("    {");
+            for (int i = 0; i < sg.FieldPropNames.Length; i++)
+            {
+                sb.AppendLine($"        public {sg.ElementTypes[i]} {sg.FieldPropNames[i]} {{ get; }}");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                if (vf.IsArray)
+                {
+                    var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"        private readonly System.Collections.Generic.List<global::PubSubLib.Vector3> {bf} = new();");
+                    sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3> {vf.FieldName} => {bf};");
+                }
+                else
+                {
+                    sb.AppendLine($"        public global::PubSubLib.Vector3 {vf.FieldName} {{ get; }}");
+                }
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var bf = "_" + char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                sb.AppendLine($"        private readonly System.Collections.Generic.List<{pa.ElementType}> {bf} = new();");
+                sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<{pa.ElementType}> {pa.FieldName} => {bf};");
+            }
+            sb.AppendLine();
+            var ctorArgs = new List<string>();
+            for (int i = 0; i < sg.FieldPropNames.Length; i++)
+            {
+                ctorArgs.Add($"{sg.ElementTypes[i]} {char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                var v3Type = vf.IsArray ? "System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3>" : "global::PubSubLib.Vector3";
+                ctorArgs.Add($"{v3Type} {argName}");
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                ctorArgs.Add($"System.Collections.Generic.IReadOnlyList<{pa.ElementType}> {argName}");
+            }
+            sb.AppendLine($"        public {sg.StructName}({string.Join(", ", ctorArgs)})");
+            sb.AppendLine("        {");
+            for (int i = 0; i < sg.FieldPropNames.Length; i++)
+            {
+                var argName = $"{char.ToLowerInvariant(sg.FieldPropNames[i][0])}{sg.FieldPropNames[i].Substring(1)}";
+                sb.AppendLine($"            {sg.FieldPropNames[i]} = {argName};");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                if (vf.IsArray)
+                {
+                    var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
+                    sb.AppendLine($"            {bf} = new System.Collections.Generic.List<global::PubSubLib.Vector3>({argName});");
+                }
+                else
+                {
+                    sb.AppendLine($"            {vf.FieldName} = {argName};");
+                }
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var bf = "_" + char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                var argName = char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
+                sb.AppendLine($"            {bf} = new System.Collections.Generic.List<{pa.ElementType}>({argName});");
+            }
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+        }
+
         foreach (var f in info.Fields)
         {
             if (f.StructGroupIndex >= 0) continue;
+            if (f.VectorGroupIndex >= 0) continue;
             if (f.IsRepeated)
             {
                 var fieldType = $"System.Collections.Generic.List<{f.ElementTypeName}>";
@@ -198,12 +285,135 @@ public sealed class UnitMirrorClientGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        foreach (var vg in info.VectorGroups)
+        {
+            if (vg.IsList)
+            {
+                var fieldType = "System.Collections.Generic.List<global::PubSubLib.Vector3>";
+                var propType = "System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3>";
+                sb.AppendLine($"    private readonly {fieldType} {vg.FieldName} = new();");
+                sb.AppendLine();
+                sb.AppendLine($"    public {propType} {vg.PropertyName} => {vg.FieldName};");
+            }
+            else
+            {
+                sb.AppendLine($"    private global::PubSubLib.Vector3 {vg.FieldName};");
+                sb.AppendLine();
+                sb.AppendLine($"    public global::PubSubLib.Vector3 {vg.PropertyName} => {vg.FieldName};");
+            }
+            sb.AppendLine();
+        }
+
         sb.AppendLine("    public void SyncFromProto()");
         sb.AppendLine("    {");
         sb.AppendLine("        var proto = GetMirrorProto();");
+        foreach (var sg in info.StructGroups)
+        {
+            sb.AppendLine($"        {sg.FieldName}.Clear();");
+            foreach (var vf in sg.Vector3Fields)
+            {
+                if (vf.IsArray)
+                    sb.AppendLine($"        int ___vecOff_{vf.FieldName} = 0;");
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                sb.AppendLine($"        int ___arrOff_{pa.FieldName} = 0;");
+            }
+            if (sg.ProtoPropNames.Length > 0)
+                sb.AppendLine($"        int __count = proto.{sg.ProtoPropNames[0]}.Count;");
+            else if (sg.PrimitiveArrayFields.Length > 0)
+                sb.AppendLine($"        int __count = proto.{sg.PrimitiveArrayFields[0].CountProtoName}.Count;");
+            else
+                sb.AppendLine($"        int __count = proto.{sg.Vector3Fields[0].CountProtoName ?? sg.Vector3Fields[0].ValueProtoName}.Count / 3;");
+            sb.AppendLine("        for (int __i = 0; __i < __count; __i++)");
+            sb.AppendLine("        {");
+            var ctorArgs = new List<string>();
+            for (int i = 0; i < sg.ProtoPropNames.Length; i++)
+            {
+                ctorArgs.Add($"__i < proto.{sg.ProtoPropNames[i]}.Count ? proto.{sg.ProtoPropNames[i]}[__i] : default");
+            }
+            foreach (var vf in sg.Vector3Fields)
+            {
+                var accField = $"___vecAcc_{vf.FieldName}";
+                if (vf.IsArray)
+                {
+                    sb.AppendLine($"            int ___vecCnt_{vf.FieldName} = __i < proto.{vf.CountProtoName}.Count ? proto.{vf.CountProtoName}[__i] : 0;");
+                    sb.AppendLine($"            var {accField} = new global::PubSubLib.Vector3[___vecCnt_{vf.FieldName}];");
+                    sb.AppendLine($"            for (int __j = 0; __j < ___vecCnt_{vf.FieldName}; __j++)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine($"                int __b = ___vecOff_{vf.FieldName} + __j * 3;");
+                    sb.AppendLine($"                {accField}[__j] = new global::PubSubLib.Vector3");
+                    sb.AppendLine("                {");
+                    sb.AppendLine($"                    x = __b < proto.{vf.ValueProtoName}.Count ? proto.{vf.ValueProtoName}[__b] : 0f,");
+                    sb.AppendLine($"                    y = __b + 1 < proto.{vf.ValueProtoName}.Count ? proto.{vf.ValueProtoName}[__b + 1] : 0f,");
+                    sb.AppendLine($"                    z = __b + 2 < proto.{vf.ValueProtoName}.Count ? proto.{vf.ValueProtoName}[__b + 2] : 0f");
+                    sb.AppendLine("                };");
+                    sb.AppendLine("            }");
+                    sb.AppendLine($"            ___vecOff_{vf.FieldName} += ___vecCnt_{vf.FieldName} * 3;");
+                    ctorArgs.Add(accField);
+                }
+                else
+                {
+                    sb.AppendLine($"            int __b = __i * 3;");
+                    sb.AppendLine($"            var {accField} = __b + 2 < proto.{vf.ValueProtoName}.Count");
+                    sb.AppendLine("                ? new global::PubSubLib.Vector3");
+                    sb.AppendLine("                {");
+                    sb.AppendLine($"                    x = proto.{vf.ValueProtoName}[__b],");
+                    sb.AppendLine($"                    y = proto.{vf.ValueProtoName}[__b + 1],");
+                    sb.AppendLine($"                    z = proto.{vf.ValueProtoName}[__b + 2]");
+                    sb.AppendLine("                }");
+                    sb.AppendLine("                : default;");
+                    ctorArgs.Add(accField);
+                }
+            }
+            foreach (var pa in sg.PrimitiveArrayFields)
+            {
+                var accField = $"___arrAcc_{pa.FieldName}";
+                sb.AppendLine($"            int ___arrCnt_{pa.FieldName} = __i < proto.{pa.CountProtoName}.Count ? proto.{pa.CountProtoName}[__i] : 0;");
+                sb.AppendLine($"            var {accField} = new {pa.ElementType}[___arrCnt_{pa.FieldName}];");
+                sb.AppendLine($"            for (int __j = 0; __j < ___arrCnt_{pa.FieldName}; __j++)");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                int __b = ___arrOff_{pa.FieldName} + __j;");
+                sb.AppendLine($"                {accField}[__j] = __b < proto.{pa.ValueProtoName}.Count ? proto.{pa.ValueProtoName}[__b] : default;");
+                sb.AppendLine("            }");
+                sb.AppendLine($"            ___arrOff_{pa.FieldName} += ___arrCnt_{pa.FieldName};");
+                ctorArgs.Add(accField);
+            }
+            sb.AppendLine($"            {sg.FieldName}.Add(new {sg.StructName}({string.Join(", ", ctorArgs)}));");
+            sb.AppendLine("        }");
+        }
+        foreach (var vg in info.VectorGroups)
+        {
+            if (vg.IsList)
+            {
+                sb.AppendLine($"        {vg.FieldName}.Clear();");
+                sb.AppendLine($"        int __count_{vg.FieldName} = proto.{vg.ProtoPropName}.Count / 3;");
+                sb.AppendLine($"        for (int __i = 0; __i < __count_{vg.FieldName}; __i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            int __b = __i * 3;");
+                sb.AppendLine($"            {vg.FieldName}.Add(new global::PubSubLib.Vector3");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                x = proto.{vg.ProtoPropName}[__b],");
+                sb.AppendLine($"                y = proto.{vg.ProtoPropName}[__b + 1],");
+                sb.AppendLine($"                z = proto.{vg.ProtoPropName}[__b + 2]");
+                sb.AppendLine("            });");
+                sb.AppendLine("        }");
+            }
+            else
+            {
+                sb.AppendLine($"        if (proto.{vg.ProtoPropName}.Count >= 3)");
+                sb.AppendLine($"            {vg.FieldName} = new global::PubSubLib.Vector3");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                x = proto.{vg.ProtoPropName}[0],");
+                sb.AppendLine($"                y = proto.{vg.ProtoPropName}[1],");
+                sb.AppendLine($"                z = proto.{vg.ProtoPropName}[2]");
+                sb.AppendLine("            };");
+            }
+        }
         foreach (var f in info.Fields)
         {
             if (f.StructGroupIndex >= 0) continue;
+            if (f.VectorGroupIndex >= 0) continue;
             if (f.IsRepeated)
             {
                 sb.AppendLine($"        {f.FieldName}.Clear();");

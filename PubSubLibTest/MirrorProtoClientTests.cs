@@ -70,6 +70,7 @@ public partial class ClassTestMirrorClient
     partial void OnCommit(string commit) => LastCommit = commit;
 }
 
+[Collection("MirrorProtoBus")]
 public class MirrorProtoClientTests
 {
     [Fact]

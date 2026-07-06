@@ -16,6 +16,7 @@ public partial class RemoveWatcherTestClient
 {
 }
 
+[Collection("MirrorProtoBus")]
 public class RegionTestAll
 {
     [Fact]
