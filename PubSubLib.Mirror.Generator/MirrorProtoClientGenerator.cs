@@ -150,7 +150,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
                 if (vf.IsArray)
                 {
                     var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
-                    sb.AppendLine($"        private readonly System.Collections.Generic.List<global::PubSubLib.Vector3> {bf} = new();");
+                    sb.AppendLine($"        private readonly System.Collections.Generic.List<global::PubSubLib.Vector3> {bf};");
                     sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3> {vf.FieldName} => {bf};");
                 }
                 else
@@ -161,7 +161,7 @@ public sealed class MirrorProtoClientGenerator : IIncrementalGenerator
             foreach (var pa in sg.PrimitiveArrayFields)
             {
                 var bf = "_" + char.ToLowerInvariant(pa.FieldName[0]) + pa.FieldName.Substring(1);
-                sb.AppendLine($"        private readonly System.Collections.Generic.List<{pa.ElementType}> {bf} = new();");
+                sb.AppendLine($"        private readonly System.Collections.Generic.List<{pa.ElementType}> {bf};");
                 sb.AppendLine($"        public System.Collections.Generic.IReadOnlyList<{pa.ElementType}> {pa.FieldName} => {bf};");
             }
             sb.AppendLine();
