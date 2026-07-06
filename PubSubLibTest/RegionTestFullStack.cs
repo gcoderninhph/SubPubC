@@ -871,7 +871,7 @@ public class RegionTestFullStack : IDisposable
 
 // ===== Target classes =====
 
-internal sealed class ServerTarget : ServerAlive, PubSubLib.ISetRegionUnit<RemoveWatcherUnitServer, ServerTarget>, IRegionUnitOnStart, IRegionUnitOnDestroy
+public sealed class ServerTarget : ServerAlive, PubSubLib.ISetRegionUnit<RemoveWatcherUnitServer, ServerTarget>, IRegionUnitOnStart, IRegionUnitOnDestroy
     {
         public bool IsAlive { get; set; } = true;
         public RemoveWatcherUnitServer? RegionUnit;

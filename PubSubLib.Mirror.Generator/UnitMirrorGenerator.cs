@@ -38,12 +38,17 @@ public sealed class UnitMirrorGenerator : IIncrementalGenerator
             return null;
 
         string? unitType = null;
+        string? targetTypeFullName = null;
         foreach (var namedArg in attr.NamedArguments)
         {
             if (namedArg.Key == "UnitType" && namedArg.Value.Value is string ut)
                 unitType = ut;
+            if (namedArg.Key == "Target" && namedArg.Value.Value is INamedTypeSymbol targetType)
+                targetTypeFullName = targetType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .TrimStartGlobalPrefix();
         }
         unitType ??= protoType.Name;
+        targetTypeFullName ??= "global::PubSubLib.IAlive";
 
         var ns = classSymbol.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .TrimStartGlobalPrefix() ?? "";
@@ -130,7 +135,7 @@ public sealed class UnitMirrorGenerator : IIncrementalGenerator
         }
         vectorGroups = validVectorGroups.ToArray();
 
-        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, null, fields.ToArray(), structGroups, vectorGroups);
+        return new UnitMirrorClassInfo(ns, classSymbol.Name, fullProtoName, unitType, targetTypeFullName, fields.ToArray(), structGroups, vectorGroups);
     }
 
     private static string ToFieldName(string propertyName)
@@ -158,7 +163,7 @@ public sealed class UnitMirrorGenerator : IIncrementalGenerator
             sb.AppendLine($"namespace {info.Namespace}");
             sb.AppendLine("{");
         }
-        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IRegionUnit<{info.ProtoTypeFullName}>, global::PubSubLib.IRegionUnitInternal");
+        sb.AppendLine($"partial class {info.ClassName} : global::PubSubLib.IRegionUnit<{info.TargetTypeFullName}>, global::PubSubLib.IRegionUnitInternal");
         sb.AppendLine("{");
 
         sb.AppendLine($"    public static string _unitType = \"{info.UnitType}\";");
@@ -178,12 +183,7 @@ public sealed class UnitMirrorGenerator : IIncrementalGenerator
         sb.AppendLine("        set => _unit.Position = value;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    public {info.ProtoTypeFullName} Get()");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (_unit.Data == null || _unit.Data.Length == 0)");
-        sb.AppendLine($"            return new {info.ProtoTypeFullName}();");
-        sb.AppendLine($"        return {info.ProtoTypeFullName}.Parser.ParseFrom(_unit.Data);");
-        sb.AppendLine("    }");
+        sb.AppendLine($"    public {info.TargetTypeFullName} Get() => ({info.TargetTypeFullName})_unit.Target!;");
         sb.AppendLine();
         sb.AppendLine("    public void SetPosition(float x, float y)");
         sb.AppendLine("    {");

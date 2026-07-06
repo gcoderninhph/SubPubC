@@ -6,7 +6,7 @@ using PubSubLib.Mirror;
 
 namespace PubSubLibTest;
 
-[UnitMirrorServer(typeof(RemoveWatcherCmd), UnitType = "remove_watcher")]
+[UnitMirrorServer(typeof(RemoveWatcherCmd), UnitType = "remove_watcher", Target = typeof(ServerTarget))]
 public partial class RemoveWatcherUnitServer
 {
 }
@@ -23,7 +23,7 @@ public class RegionTestAll
     public void Generated_UnitMirrorServer_Implements_IRegionUnit()
     {
         var unit = new RemoveWatcherUnitServer();
-        Assert.IsAssignableFrom<PubSubLib.IRegionUnit<RemoveWatcherCmd>>(unit);
+        Assert.IsAssignableFrom<PubSubLib.IRegionUnit<ServerTarget>>(unit);
         Assert.IsAssignableFrom<IRegionUnitInternal>(unit);
     }
 
@@ -152,31 +152,26 @@ public class RegionTestAll
     }
 
     [Fact]
-    public void Generated_UnitMirrorServer_Get_ParsesFromData()
+    public void Generated_UnitMirrorServer_Get_ReturnsTarget()
     {
         var unit = new RemoveWatcherUnitServer();
 
-        var cmd = new RemoveWatcherCmd { WatcherId = 99 };
-        var bytes = cmd.ToByteArray();
-
-        var iu = new FakeServerUnit(1, "remove_watcher") { Data = bytes };
+        var target = new ServerTarget();
+        var iu = new FakeServerUnit(1, "remove_watcher") { Target = target };
         ((IRegionUnitInternal)unit).SetUnit(iu);
 
-        var result = unit.Get();
-        Assert.Equal(99, result.WatcherId);
+        Assert.Same(target, unit.Get());
     }
 
     [Fact]
-    public void Generated_UnitMirrorServer_Get_EmptyData_ReturnsNewProto()
+    public void Generated_UnitMirrorServer_Get_NullTarget_ReturnsNull()
     {
         var unit = new RemoveWatcherUnitServer();
 
         var iu = new FakeServerUnit(1, "remove_watcher");
         ((IRegionUnitInternal)unit).SetUnit(iu);
 
-        var result = unit.Get();
-        Assert.NotNull(result);
-        Assert.Equal(0, result.WatcherId);
+        Assert.Null(unit.Get());
     }
 
     [Fact]
@@ -271,7 +266,7 @@ public class RegionTestAll
         public string Type { get; }
         public Vector2 Position { get; set; }
         public bool IsAlive => true;
-        public object? Target => null;
+        public object? Target { get; set; }
         public int Version { get; set; }
         public byte[]? Data { get; set; }
 

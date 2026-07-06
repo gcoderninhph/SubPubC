@@ -5,42 +5,42 @@ using PubSubLib.Mirror;
 
 namespace PubSubLibTest;
 
-[UnitMirrorServer(typeof(RemoveWatcherCmd), UnitType = "remove_watcher")]
+[UnitMirrorServer(typeof(RemoveWatcherCmd), UnitType = "remove_watcher", Target = typeof(UMRemoveWatcherTarget))]
 public partial class UMRemoveWatcher
 {
 }
 
-[UnitMirrorServer(typeof(BatchEnterMsg), UnitType = "batch_enter")]
+[UnitMirrorServer(typeof(BatchEnterMsg), UnitType = "batch_enter", Target = typeof(UMBatchEnterTarget))]
 public partial class UMBatchEnter
 {
 }
 
-[UnitMirrorServer(typeof(StructTestMsg), UnitType = "struct_test")]
+[UnitMirrorServer(typeof(StructTestMsg), UnitType = "struct_test", Target = typeof(UMStructTestTarget))]
 public partial class UMStructTest
 {
 }
 
-[UnitMirrorServer(typeof(Vector3TestMsg), UnitType = "vector3_test")]
+[UnitMirrorServer(typeof(Vector3TestMsg), UnitType = "vector3_test", Target = typeof(UMVector3TestTarget))]
 public partial class UMVector3Test
 {
 }
 
-[UnitMirrorServer(typeof(Vector3StructTestMsg), UnitType = "v3struct_test")]
+[UnitMirrorServer(typeof(Vector3StructTestMsg), UnitType = "v3struct_test", Target = typeof(UMVector3StructTarget))]
 public partial class UMVector3Struct
 {
 }
 
-[UnitMirrorServer(typeof(Vector3SingleStructTestMsg), UnitType = "v3single_test")]
+[UnitMirrorServer(typeof(Vector3SingleStructTestMsg), UnitType = "v3single_test", Target = typeof(UMVector3SingleStructTarget))]
 public partial class UMVector3SingleStruct
 {
 }
 
-[UnitMirrorServer(typeof(PrimitiveArrayStructTestMsg), UnitType = "primarr_test")]
+[UnitMirrorServer(typeof(PrimitiveArrayStructTestMsg), UnitType = "primarr_test", Target = typeof(UMPrimitiveArrayTarget))]
 public partial class UMPrimitiveArray
 {
 }
 
-[UnitMirrorServer(typeof(ClassTestMsg), UnitType = "class_test")]
+[UnitMirrorServer(typeof(ClassTestMsg), UnitType = "class_test", Target = typeof(UMClassTestTarget))]
 public partial class UMClassTest
 {
 }
@@ -523,4 +523,44 @@ public class UnitMirrorTests
             IsDestroyed = true;
         }
     }
+}
+
+public sealed class UMRemoveWatcherTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMBatchEnterTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMStructTestTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMVector3TestTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMVector3StructTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMVector3SingleStructTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMPrimitiveArrayTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
+}
+
+public sealed class UMClassTestTarget : PubSubLib.IAlive
+{
+    public bool IsAlive { get; set; } = true;
 }

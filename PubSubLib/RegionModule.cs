@@ -46,7 +46,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void RegisterUnitType<T, TR>(string unitType, Func<TR>? factory = null)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         _factories[unitType] = factory ?? (() => default!);
@@ -231,7 +231,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     // ===== RegionModule public API =====
 
     public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, TR target)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var tcs = new TaskCompletionSource<T>();
@@ -258,7 +258,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T> callback)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         CreateUnitAsync<T, TR>(id, position, target)
@@ -273,7 +273,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, Func<TR> targetFactory)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var target = targetFactory();
@@ -281,7 +281,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> targetFactory, Action<T> callback)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var target = targetFactory();
@@ -289,7 +289,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public T GetUnit<T, TR>(long id)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var wrapper = new T();
@@ -303,7 +303,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public IList<T> GetUnits<T, TR>()
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var wrapper = new T();
@@ -319,7 +319,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
     }
 
     public void DestroyUnit<T, TR>(long id)
-        where T : class, new()
+        where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var wrapper = new T();

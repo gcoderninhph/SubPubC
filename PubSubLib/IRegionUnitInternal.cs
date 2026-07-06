@@ -1,6 +1,6 @@
 namespace PubSubLib;
 
-internal interface IRegionUnitInternal
+public interface IRegionUnitInternal
 {
     void SetUnit(IUnit unit);
     string GetUnitType();
