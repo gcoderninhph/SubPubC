@@ -1,6 +1,6 @@
 namespace PubSubLib.Mirror
 {
-    internal interface IMirrorListItemDirtyProxy
+    public interface IMirrorListItemDirtyProxy
     {
         void SetDirtyMarker(System.Action? markDirty);
     }
