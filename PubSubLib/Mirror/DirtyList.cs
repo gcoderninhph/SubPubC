@@ -34,7 +34,7 @@ namespace PubSubLib.Mirror
             _onDirty = onDirty;
         }
 
-        internal void SetDirtyCallback(System.Action? onDirty)
+        public void SetDirtyCallback(System.Action? onDirty)
         {
             _onDirty = onDirty;
         }
