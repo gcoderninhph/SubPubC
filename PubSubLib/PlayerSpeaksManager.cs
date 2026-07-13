@@ -117,6 +117,12 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         }
         catch (Exception ex) { PubSubLog.Error(ex, "CreateData OnMessage registration failed"); }
 
+        if (data is IOnCreate onCreate)
+        {
+            try { onCreate.OnCreate(); }
+            catch (Exception ex) { PubSubLog.Error(ex, "IOnCreate.OnCreate failed"); }
+        }
+
         return data;
     }
 
@@ -187,7 +193,13 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
 
             foreach (var key in keys)
             {
-                if (_data.TryRemove(key, out var data))
+                if (_data.TryGetValue(key, out var data) && data is IOnRemove onRemove)
+                {
+                    try { onRemove.OnRemove(); }
+                    catch (Exception ex) { PubSubLog.Error(ex, "IOnRemove.OnRemove failed"); }
+                }
+
+                if (_data.TryRemove(key, out data))
                 {
                     if (_removeHandlers.TryGetValue(key.DataName, out var handler))
                     {
@@ -244,6 +256,23 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                     catch (Exception ex) { PubSubLog.Error(ex, "OnOnlineStatus SetOnline failed"); }
                 }
             }
+
+            foreach (var kv in _data)
+            {
+                if (kv.Key.PlayerId == msg.PlayerId)
+                {
+                    if (msg.IsOnline && kv.Value is IOnClientConnect onConnect)
+                    {
+                        try { onConnect.OnClientConnect(); }
+                        catch (Exception ex) { PubSubLog.Error(ex, "IOnClientConnect failed"); }
+                    }
+                    else if (!msg.IsOnline && kv.Value is IOnClientDisconnect onDisconnect)
+                    {
+                        try { onDisconnect.OnClientDisconnect(); }
+                        catch (Exception ex) { PubSubLog.Error(ex, "IOnClientDisconnect failed"); }
+                    }
+                }
+            }
         }
         catch (Exception ex) { PubSubLog.Error(ex, "OnOnlineStatus failed"); }
     }
@@ -294,7 +323,13 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                 {
                     if (now - kv.Value > timeout)
                     {
-                        if (_data.TryRemove(kv.Key, out var stale))
+                        if (_data.TryGetValue(kv.Key, out var stale) && stale is IOnRemove onRemove)
+                        {
+                            try { onRemove.OnRemove(); }
+                            catch (Exception ex) { PubSubLog.Error(ex, "IOnRemove.OnRemove failed"); }
+                        }
+
+                        if (_data.TryRemove(kv.Key, out stale))
                         {
                             if (_removeHandlers.TryGetValue(kv.Key.DataName, out var handler))
                             {
