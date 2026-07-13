@@ -5,10 +5,10 @@ using PubSubLib.Messages;
 
 namespace PubSubLib;
 
-internal sealed class RegionModule : IRegionModule, IDisposable
+internal sealed class RegionModule : IRegionModule
 {
     private readonly IPubSub _pubSub;
-    private readonly INatifyAdapter? _natifyAdapter;
+    private readonly NatifyClientFast? _natifyAdapter;
     private readonly Dictionary<UnitKey, object> _units = new();
     private readonly Dictionary<string, Delegate> _factories = new();
     private ISubscrible? _subBatchEnter;
@@ -26,14 +26,15 @@ internal sealed class RegionModule : IRegionModule, IDisposable
 
         if (config.NatifyClient != null)
         {
-            _natifyAdapter = new NatifyAdapter(config.NatifyClient);
+            _natifyAdapter = config.NatifyClient;
 
-            _natifyAdapter.Subscribe<PubSubCommand>(PubSubCmdTopic, OnPubSubCommand);
+            _natifyAdapter.OnMessage<PubSubCommand>(PubSubCmdTopic, OnPubSubCommand);
 
             Action<(List<long> watcherIds, IUnit unit)> batchEnter = a => OnPubSubBatchEnter(a.unit, a.watcherIds);
             Action<(List<long> watcherIds, IUnit unit)> batchLeave = a => OnPubSubBatchLeave(a.unit, a.watcherIds);
             Action<(long watcherId, List<IUnit> units)> syncEnter = a => OnPubSubSyncEnter(a.watcherId, a.units);
-            Action<(long watcherId, List<UnitKey> unitKeys)> syncLeave = a => OnPubSubSyncLeave(a.watcherId, a.unitKeys);
+            Action<(long watcherId, List<UnitKey> unitKeys)>
+                syncLeave = a => OnPubSubSyncLeave(a.watcherId, a.unitKeys);
             Action<(List<long> watcherIds, IUnit unit, string eventName, object data, bool reliable)> unitEvent =
                 a => OnPubSubUnitEvent(a.unit, a.watcherIds, a.eventName, a.data, a.reliable);
 
@@ -103,7 +104,10 @@ internal sealed class RegionModule : IRegionModule, IDisposable
                     break;
             }
         }
-        catch (Exception ex) { PubSubLog.Error(ex, "RegionModule.OnPubSubCommand failed"); }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "RegionModule.OnPubSubCommand failed");
+        }
     }
 
     private void HandleAddWatcher(AddWatcherCmd cmd)
@@ -134,6 +138,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
                 dict[ids[i]] = versions[i];
             typeVersions[group.Type] = dict;
         }
+
         _pubSub.WatcherPingUnits(cmd.WatcherId, typeVersions);
     }
 
@@ -206,8 +211,10 @@ internal sealed class RegionModule : IRegionModule, IDisposable
                 g = new TypeGroup { Type = k.Type };
                 groups[k.Type] = g;
             }
+
             g.UnitIds.Add(k.Id);
         }
+
         msg.Keys.AddRange(groups.Values);
 
         _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { SyncLeave = msg });
@@ -266,8 +273,14 @@ internal sealed class RegionModule : IRegionModule, IDisposable
             {
                 if (t.IsCompletedSuccessfully)
                 {
-                    try { callback(t.Result); }
-                    catch (Exception ex) { PubSubLog.Error(ex, "CreateUnit callback failed"); }
+                    try
+                    {
+                        callback(t.Result);
+                    }
+                    catch (Exception ex)
+                    {
+                        PubSubLog.Error(ex, "CreateUnit callback failed");
+                    }
                 }
             });
     }
@@ -333,6 +346,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
             if (kvp.Key.Type == unitType && kvp.Value is T t)
                 result.Add(t);
         }
+
         return result;
     }
 
