@@ -19,7 +19,8 @@ public interface IRegionModule : IDisposable
     void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> target, Action<T> callback)
         where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
 
-    T GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    T? GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    bool TryGetUnit<T, TR>(long id, out T unit) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
     IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
 
     void DestroyUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;

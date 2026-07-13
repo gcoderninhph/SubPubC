@@ -288,7 +288,7 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         CreateUnit<T, TR>(id, position, target, callback);
     }
 
-    public T GetUnit<T, TR>(long id)
+    public T? GetUnit<T, TR>(long id)
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
@@ -299,7 +299,25 @@ internal sealed class RegionModule : IRegionModule, IDisposable
         if (_units.TryGetValue(key, out var obj) && obj is T t)
             return t;
 
-        throw new KeyNotFoundException($"Unit {unitType}:{id} not found");
+        return null;
+    }
+
+    public bool TryGetUnit<T, TR>(long id, out T unit)
+        where T : class, IRegionUnit<TR>, new()
+        where TR : class, IAlive
+    {
+        var wrapper = new T();
+        var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
+        var key = new UnitKey(id, unitType);
+
+        if (_units.TryGetValue(key, out var obj) && obj is T t)
+        {
+            unit = t;
+            return true;
+        }
+
+        unit = null!;
+        return false;
     }
 
     public IList<T> GetUnits<T, TR>()
