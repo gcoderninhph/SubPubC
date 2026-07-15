@@ -34,6 +34,7 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
     private INatifyClient _natifyClient = null!;
     private IServer _serverConn;
     private IPlayerSpeaksManager _manager;
+    private IPlayerSpeaksRouterModule _routerModule = null!;
 
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -59,7 +60,8 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
             var id = spl[1];
             return Task.FromResult<IUser>(new Player(id, user));
         });
-        _serverConn.AddModule(IPlayerSpeaksRouterModule.Create(_natifyServer, "VN"));
+        _routerModule = IPlayerSpeaksRouterModule.Create(_natifyServer, "VN");
+        _serverConn.AddModule(_routerModule);
     }
 
     private async Task CreateServerAsync()
@@ -111,6 +113,7 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
     public async Task DisposeAsync()
     {
         _serverConn?.DisposeAsync().GetAwaiter().GetResult();
+        _routerModule?.Dispose();
         if (_manager != null)
             await _manager.DisposeAsync();
         if (_natifyServer != null)

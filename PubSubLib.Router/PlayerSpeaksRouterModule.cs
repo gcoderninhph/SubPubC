@@ -107,4 +107,11 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
         }
         catch (Exception ex) { PubSubLog.Error(ex, "OnClientPing failed"); }
     }
+
+    public void Dispose()
+    {
+        _clientMsgSub?.UnSubscribe();
+        _pingSub?.UnSubscribe();
+        _natifyClient.Dispose();
+    }
 }
