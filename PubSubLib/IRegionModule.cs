@@ -1,6 +1,6 @@
 ﻿namespace PubSubLib;
 
-public interface IRegionModule : IDisposable
+public interface IRegionModule : IAsyncDisposable
 {
     public static IRegionModule Create(RegionConfig config)
     {

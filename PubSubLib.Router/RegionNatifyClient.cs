@@ -6,7 +6,7 @@ namespace PubSubLib.Router;
 
 internal sealed class RegionNatifyClient : IRegionNatifyClient
 {
-    private readonly NatifyServer _server;
+    private readonly INatifyServer _server;
     private readonly string _regionId;
 
     private const string PubSubCmdTopic = "PubSub.Cmd";
@@ -18,7 +18,7 @@ internal sealed class RegionNatifyClient : IRegionNatifyClient
     private Action<SyncLeaveMsg>? _onSyncLeave;
     private Action<UnitEventMsg>? _onUnitEvent;
 
-    internal RegionNatifyClient(NatifyServer server, string regionId)
+    internal RegionNatifyClient(INatifyServer server, string regionId)
     {
         _server = server;
         _regionId = regionId;

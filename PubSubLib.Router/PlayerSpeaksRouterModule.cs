@@ -13,7 +13,7 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
     private readonly ConcurrentDictionary<long, IConnection> _connections = new();
     private ISubscribe? _clientMsgSub;
 
-    internal PlayerSpeaksRouterModule(NatifyServer server, string regionId)
+    internal PlayerSpeaksRouterModule(INatifyServer server, string regionId)
     {
         _natifyClient = IPlayerSpeaksNatifyClient.Create(server, regionId);
     }

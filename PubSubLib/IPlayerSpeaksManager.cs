@@ -1,6 +1,6 @@
 ﻿namespace PubSubLib;
 
-public interface IPlayerSpeaksManager : IDisposable
+public interface IPlayerSpeaksManager : IAsyncDisposable
 {
     static IPlayerSpeaksManager Create(PlayerSpeakerConfig config)
     {

@@ -12,7 +12,7 @@ internal sealed class RegionRouterModule : IRegionRouterModule
     private readonly ConcurrentDictionary<long, IConnection> _connections = new();
     private readonly ConcurrentDictionary<IConnection, long> _watcherIds = new();
 
-    internal RegionRouterModule(NatifyServer server, string regionId)
+    internal RegionRouterModule(INatifyServer server, string regionId)
     {
         _natifyClient = IRegionNatifyClient.Create(server, regionId);
     }

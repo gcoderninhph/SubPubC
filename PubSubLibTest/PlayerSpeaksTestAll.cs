@@ -26,16 +26,18 @@ public partial class TestPlayerDataClient
     }
 }
 
-public class PlayerSpeaksTestAll : IDisposable
+public class PlayerSpeaksTestAll : IAsyncLifetime
 {
     private const string NatsUrl = "nats://localhost:4222";
 
-    private NatifyServer _natifyServer;
-    private NatifyClientFast _natifyClient;
+    private INatifyServer _natifyServer = null!;
+    private INatifyClient _natifyClient = null!;
     private IServer _serverConn;
     private IPlayerSpeaksManager _manager;
 
-    private void CreateRouter()
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    private async Task CreateRouterAsync()
     {
         _serverConn = IServer.Create(new ServerConfig
         {
@@ -49,7 +51,7 @@ public class PlayerSpeaksTestAll : IDisposable
             jwtIssuer = "test-issuer",
         });
 
-        _natifyServer = new NatifyServer(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
+        _natifyServer = await INatifyServer.CreateAsync(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
         _serverConn.OnLogin<StringValue>(body =>
         {
             var spl = body.Value.Split('_');
@@ -62,7 +64,7 @@ public class PlayerSpeaksTestAll : IDisposable
 
     private async Task CreateServerAsync()
     {
-        _natifyClient = new NatifyClientFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
+        _natifyClient = await INatifyClient.CreateFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
         _manager = IPlayerSpeaksManager.Create(new PlayerSpeakerConfig
         {
             ClientFast = _natifyClient,
@@ -93,12 +95,15 @@ public class PlayerSpeaksTestAll : IDisposable
         return new PlayerSpeaksClientHandle(client, module);
     }
 
-    public void Dispose()
+    public async Task DisposeAsync()
     {
         _serverConn?.DisposeAsync().GetAwaiter().GetResult();
-        _manager?.Dispose();
-        _natifyServer?.Dispose();
-        _natifyClient?.Dispose();
+        if (_manager != null)
+            await _manager.DisposeAsync();
+        if (_natifyServer != null)
+            await _natifyServer.DisposeAsync();
+        if (_natifyClient != null)
+            await _natifyClient.DisposeAsync();
     }
 
     private sealed record PlayerSpeaksClientHandle(IClient Client, IPlayerSpeaksClientModule Module) : IDisposable
@@ -117,7 +122,7 @@ public class PlayerSpeaksTestAll : IDisposable
     {
         var playerId = 1L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
@@ -152,7 +157,7 @@ public class PlayerSpeaksTestAll : IDisposable
     {
         var playerId = 3L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
@@ -190,7 +195,7 @@ public class PlayerSpeaksTestAll : IDisposable
         var player1Id = 10L;
         var player2Id = 20L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var serverData1 = _manager.CreateData<TestPlayerData>(player1Id);
@@ -244,7 +249,7 @@ public class PlayerSpeaksTestAll : IDisposable
     {
         var playerId = 50L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
@@ -268,7 +273,7 @@ public class PlayerSpeaksTestAll : IDisposable
         var signal = new ManualResetEventSlim();
         ChatMsg? received = null;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         // pass 1: verify mirror client khớp mirror server
@@ -306,7 +311,7 @@ public class PlayerSpeaksTestAll : IDisposable
         var signal = new ManualResetEventSlim();
         ChatMsg? received = null;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<MirrorSendTestMirror>(playerId);
@@ -339,7 +344,7 @@ public class PlayerSpeaksTestAll : IDisposable
     {
         var playerId = 99L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         _manager.OnDefault<TestPlayerData>(data =>
@@ -375,7 +380,7 @@ public class PlayerSpeaksTestAll : IDisposable
         var onlinePlayerId = 99L;
         var offlinePlayerId = 100L;
 
-        CreateRouter();
+        await CreateRouterAsync();
         await CreateServerAsync();
 
         var dataOnline = _manager.CreateData<TestPlayerData>(onlinePlayerId);

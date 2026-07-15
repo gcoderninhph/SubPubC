@@ -8,7 +8,7 @@ namespace PubSubLib;
 internal sealed class RegionModule : IRegionModule
 {
     private readonly IPubSub _pubSub;
-    private readonly NatifyClientFast? _natifyAdapter;
+    private readonly INatifyClient? _natifyAdapter;
     private readonly Dictionary<UnitKey, object> _units = new();
     private readonly Dictionary<string, Delegate> _factories = new();
     private ISubscrible? _subBatchEnter;
@@ -374,7 +374,7 @@ internal sealed class RegionModule : IRegionModule
         _units.Remove(key);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _subBatchEnter?.UnSubscribe();
         _subBatchLeave?.UnSubscribe();
@@ -382,6 +382,7 @@ internal sealed class RegionModule : IRegionModule
         _subSyncLeave?.UnSubscribe();
         _subUnitEvent?.UnSubscribe();
         _pubSub.Dispose();
-        _natifyAdapter?.Dispose();
+        if (_natifyAdapter != null)
+            await _natifyAdapter.DisposeAsync();
     }
 }

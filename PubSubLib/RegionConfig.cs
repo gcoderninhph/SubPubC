@@ -4,5 +4,5 @@ namespace PubSubLib;
 
 public class RegionConfig : PubSubConfig
 {
-    public NatifyClientFast? NatifyClient = null;
+    public INatifyClient? NatifyClient = null;
 }

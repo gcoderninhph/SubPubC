@@ -3,24 +3,24 @@ using PubSubLib.Messages;
 
 namespace PubSubLibTest;
 
-public class NatifyFullRoundtripTests : IDisposable
+public class NatifyFullRoundtripTests : IAsyncLifetime
 {
     private const string NatsUrl = "nats://localhost:4222";
 
-    private readonly NatifyServer _server;
-    private readonly NatifyClientFast _client;
+    private INatifyServer _server = null!;
+    private INatifyClient _client = null!;
 
-    public NatifyFullRoundtripTests()
+    public async Task InitializeAsync()
     {
-        _server = new NatifyServer(NatsUrl, "testSrv", "SrvGroup", "testCli");
-        _client = new NatifyClientFast(NatsUrl, "testCli", "CliGroup", "VN", "testSrv");
-        Thread.Sleep(2000);
+        _server = await INatifyServer.CreateAsync(NatsUrl, "testSrv", "SrvGroup", "testCli");
+        _client = await INatifyClient.CreateFast(NatsUrl, "testCli", "CliGroup", "VN", "testSrv");
+        await Task.Delay(2000);
     }
 
-    public void Dispose()
+    public async Task DisposeAsync()
     {
-        _server.Dispose();
-        _client.Dispose();
+        await _server.DisposeAsync();
+        await _client.DisposeAsync();
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace PubSubLib.Router;
 
 public interface IRegionNatifyClient : IDisposable
 {
-    static IRegionNatifyClient Create(NatifyServer server, string regionId)
+    static IRegionNatifyClient Create(INatifyServer server, string regionId)
     {
         return new RegionNatifyClient(server, regionId);
     }

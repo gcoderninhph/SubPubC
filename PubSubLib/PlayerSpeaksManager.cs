@@ -12,7 +12,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
     private const string MsgTopic = "PlayerSpeaks.Msg";
     private const string ClientMsgTopic = "PlayerSpeaks.ClientMsg";
     private const string StatusTopic = "PlayerSpeaks.Status";
-    private readonly NatifyClientFast _natify;
+    private readonly INatifyClient _natify;
 
     private readonly int _playerTimeoutSeconds;
 
@@ -492,7 +492,7 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
@@ -503,6 +503,6 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
 
         _data.Clear();
         _lastActiveTicks.Clear();
-        _natify.Dispose();
+        await _natify.DisposeAsync();
     }
 }

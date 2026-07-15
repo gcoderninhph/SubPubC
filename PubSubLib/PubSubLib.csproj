@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Natify" Version="1.0.3" />
+    <PackageReference Include="Natify" Version="1.2.0" />
     <PackageReference Include="Google.Protobuf" Version="3.34.1" />
     <PackageReference Include="Grpc.Tools" Version="2.70.0" PrivateAssets="All" />
   </ItemGroup>

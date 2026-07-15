@@ -5,7 +5,7 @@ namespace PubSubLib.Router;
 
 public interface IPlayerSpeaksNatifyClient : IDisposable
 {
-    static IPlayerSpeaksNatifyClient Create(NatifyServer server, string regionId)
+    static IPlayerSpeaksNatifyClient Create(INatifyServer server, string regionId)
     {
         return new PlayerSpeaksNatifyClient(server, regionId);
     }

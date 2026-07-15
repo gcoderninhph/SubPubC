@@ -5,7 +5,7 @@ namespace PubSubLib.Router;
 
 public interface IPlayerSpeaksRouterModule : IServerModule
 {
-    static IPlayerSpeaksRouterModule Create(NatifyServer server, string regionId)
+    static IPlayerSpeaksRouterModule Create(INatifyServer server, string regionId)
     {
         return new PlayerSpeaksRouterModule(server, regionId);
     }

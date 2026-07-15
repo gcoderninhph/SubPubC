@@ -6,7 +6,7 @@ namespace PubSubLib.Router;
 
 internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
 {
-    private readonly NatifyServer _server;
+    private readonly INatifyServer _server;
     private readonly string _regionId;
 
     private Action<PlayerSpeaksEvent>? _onPlayerSpeaks;
@@ -17,7 +17,7 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
     private const string ClientMsgTopic = "PlayerSpeaks.ClientMsg";
     private const string StatusTopic = "PlayerSpeaks.Status";
 
-    internal PlayerSpeaksNatifyClient(NatifyServer server, string regionId)
+    internal PlayerSpeaksNatifyClient(INatifyServer server, string regionId)
     {
         _server = server;
         _regionId = regionId;

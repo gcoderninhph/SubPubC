@@ -24,12 +24,12 @@ public partial class TrackedWatcherUnitClient
 {
 }
 
-public class RegionTestFullStack : IDisposable
+public class RegionTestFullStack : IAsyncLifetime
 {
     private const string NatsUrl = "nats://localhost:4222";
 
-    private NatifyServer _natifyServer;
-    private NatifyClientFast _natifyClient;
+    private INatifyServer _natifyServer = null!;
+    private INatifyClient _natifyClient = null!;
     private IClient _clientConn;
     private IServer _serverConn;
     private IRegionModule _regionModule;
@@ -38,6 +38,8 @@ public class RegionTestFullStack : IDisposable
     private static readonly Dictionary<long, RemoveWatcherTarget> _clientTargets = new();
     private static readonly Dictionary<long, ServerTarget> _serverTargets = new();
     private readonly List<ClientContext> _clients = new();
+
+    public Task InitializeAsync() => Task.CompletedTask;
 
     private static Vector2 V(float x, float y) => new() { x = x, y = y };
 
@@ -55,7 +57,7 @@ public class RegionTestFullStack : IDisposable
             udpPingTimeoutMs = 15000
         });
 
-        _regionClientModule = IRegionClientModule.Create(new Config
+        _regionClientModule = IRegionClientModule.Create(new PubSubLib.Client.Config
         {
             PingIntervalMs = 300
         });
@@ -65,7 +67,7 @@ public class RegionTestFullStack : IDisposable
         await _clientConn.ConnectServer();
     }
 
-    private void CreateRouter()
+    private async Task CreateRouterAsync()
     {
         _serverConn = IServer.Create(new ServerConfig
         {
@@ -79,7 +81,7 @@ public class RegionTestFullStack : IDisposable
             jwtIssuer = "test-issuer",
         });
 
-        _natifyServer = new NatifyServer(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
+        _natifyServer = await INatifyServer.CreateAsync(NatsUrl, "SyncRouter", "SyncGroup", "SyncServer");
         _serverConn.OnLogin<StringValue>(body =>
         {
             var spl = body.Value.Split('_');
@@ -90,9 +92,9 @@ public class RegionTestFullStack : IDisposable
         _serverConn.AddModule(IRegionRouterModule.Create(_natifyServer, "VN"));
     }
 
-    private void CreateUnityServer()
+    private async Task CreateUnityServerAsync()
     {
-        _natifyClient = new NatifyClientFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
+        _natifyClient = await INatifyClient.CreateFast(NatsUrl, "SyncServer", "ServerGroup", "VN", "SyncRouter");
         _regionModule = IRegionModule.Create(new RegionConfig
         {
             GridSize = 100f,
@@ -129,7 +131,7 @@ public class RegionTestFullStack : IDisposable
             udpPingIntervalMs = 5000,
             udpPingTimeoutMs = 15000
         });
-        ctx.RegionClientModule = IRegionClientModule.Create(new Config
+        ctx.RegionClientModule = IRegionClientModule.Create(new PubSubLib.Client.Config
         {
             PingIntervalMs = 300
         });
@@ -154,14 +156,17 @@ public class RegionTestFullStack : IDisposable
         }
     }
 
-    public void Dispose()
+    public async Task DisposeAsync()
     {
         _regionClientModule = null!;
         _clientConn?.DisposeAsync().GetAwaiter().GetResult();
         _serverConn?.DisposeAsync().GetAwaiter().GetResult();
-        _regionModule?.Dispose();
-        _natifyServer?.Dispose();
-        _natifyClient?.Dispose();
+        if (_regionModule != null)
+            await _regionModule.DisposeAsync();
+        if (_natifyServer != null)
+            await _natifyServer.DisposeAsync();
+        if (_natifyClient != null)
+            await _natifyClient.DisposeAsync();
         foreach (var ctx in _clients)
             ctx.Dispose();
         _clients.Clear();
@@ -176,8 +181,8 @@ public class RegionTestFullStack : IDisposable
         var unitId = 1L;
         var signal = new ManualResetEventSlim();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
         await CreateUnityClient("test", unitId);
 
         _regionClientModule.OnCreateUnit<RemoveWatcherUnitClient, RemoveWatcherTarget>(wrapper =>
@@ -208,8 +213,8 @@ public class RegionTestFullStack : IDisposable
         var createdSignal = new ManualResetEventSlim();
         var commitSignal = new ManualResetEventSlim();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
         await CreateUnityClient("test", unitId);
 
         _regionClientModule.OnCreateUnit<RemoveWatcherUnitClient, RemoveWatcherTarget>(wrapper =>
@@ -253,8 +258,8 @@ public class RegionTestFullStack : IDisposable
         var createdSignal = new ManualResetEventSlim();
         var destroyedSignal = new ManualResetEventSlim();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
         await CreateUnityClient("test", unitId);
 
         _regionClientModule.OnCreateUnit<RemoveWatcherUnitClient, RemoveWatcherTarget>(wrapper =>
@@ -294,8 +299,8 @@ public class RegionTestFullStack : IDisposable
         var serverInitSignal = new ManualResetEventSlim();
         var serverDestroySignal = new ManualResetEventSlim();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var target = new ServerTarget
         {
@@ -327,8 +332,8 @@ public class RegionTestFullStack : IDisposable
         for (int i = 1; i <= unitCount; i++)
             createSignals[i] = new ManualResetEventSlim();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
         var ctx = await CreateClient("multi", 1);
 
         ctx.RegionClientModule.OnCreateUnit<TrackedWatcherUnitClient, TrackedTarget>(wrapper =>
@@ -366,8 +371,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
@@ -426,8 +431,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
@@ -509,8 +514,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var ctx = await CreateClient("player", 1);
 
@@ -557,8 +562,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
@@ -613,8 +618,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clientA = await CreateClient("player", 1);
         var clientB = await CreateClient("player", 2);
@@ -680,8 +685,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clientA = await CreateClient("player", 1);
         var createSigsA = new Dictionary<long, ManualResetEventSlim>();
@@ -754,8 +759,8 @@ public class RegionTestFullStack : IDisposable
     {
         _serverTargets.Clear();
 
-        CreateRouter();
-        CreateUnityServer();
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
 
         var clients = new[]
         {
