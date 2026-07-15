@@ -10,4 +10,5 @@ public interface IPlayerData
     void OnChange(Action<byte[], string> handler);
     void OnMessage(Action<string, byte[]> handler);
     void Commit(string commit);
+    void DoneInit();
 }

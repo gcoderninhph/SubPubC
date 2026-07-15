@@ -16,6 +16,7 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
     private const string MsgTopic = "PlayerSpeaks.Msg";
     private const string ClientMsgTopic = "PlayerSpeaks.ClientMsg";
     private const string StatusTopic = "PlayerSpeaks.Status";
+    private const string PingTopic = "PlayerSpeaks.Ping";
 
     internal PlayerSpeaksNatifyClient(INatifyServer server, string regionId)
     {
@@ -40,6 +41,11 @@ internal sealed class PlayerSpeaksNatifyClient : IPlayerSpeaksNatifyClient
     public void SendOnlineStatus(PlayerOnlineStatusMsg msg)
     {
         _server.Publish(StatusTopic, _regionId, msg);
+    }
+
+    public void SendPing(PlayerPingMsg msg)
+    {
+        _server.Publish(PingTopic, _regionId, msg);
     }
 
     public void OnPlayerSpeaks(Action<PlayerSpeaksEvent> callback)

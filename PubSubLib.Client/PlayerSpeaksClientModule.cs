@@ -1,3 +1,4 @@
+using System;
 using Google.Protobuf;
 using MyConnection;
 using PubSubLib.Contracts;
@@ -8,13 +9,17 @@ namespace PubSubLib.Client;
 internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 {
     private readonly PlayerSpeaksClient _client;
+    private readonly int _pingIntervalMs;
     private IClient? _clientPtr;
     private ISubscribe? _tcpSub;
     private ISubscribe? _msgSub;
     private ISubscribe? _welcomeSub;
+    private long _lastPingTicks;
+    private bool _playerIdSet;
 
-    public PlayerSpeaksClientModule()
+    public PlayerSpeaksClientModule(int pingIntervalMs)
     {
+        _pingIntervalMs = pingIntervalMs;
         _client = new PlayerSpeaksClient();
         _client.OnSendToServer = (dataName, playerId, subject, bytes) =>
         {
@@ -38,7 +43,11 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
 
     private void OnWelcome(PlayerSpeaksWelcomeMsg msg)
     {
-        try { _client.SetPlayerId(msg.PlayerId); }
+        try
+        {
+            _client.SetPlayerId(msg.PlayerId);
+            _playerIdSet = true;
+        }
         catch (Exception ex) { PubSubLog.Error(ex, "OnWelcome failed"); }
     }
 
@@ -57,6 +66,17 @@ internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
     public IPlayerSpeaksClient Get()
     {
         return _client;
+    }
+
+    public void Tick()
+    {
+        if (!_playerIdSet || _clientPtr == null) return;
+
+        var now = DateTime.UtcNow.Ticks;
+        if (now - _lastPingTicks < _pingIntervalMs * TimeSpan.TicksPerMillisecond) return;
+
+        _lastPingTicks = now;
+        _clientPtr.SendOnTcp("PlayerSpeaks.Ping", new PlayerPingMsg { PlayerId = _client.PlayerId });
     }
 
     public void Dispose()

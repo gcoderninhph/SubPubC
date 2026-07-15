@@ -11,6 +11,7 @@ public interface IPlayerSpeaksNatifyClient : IDisposable
     }
 
     void SendOnlineStatus(PlayerOnlineStatusMsg msg);
+    void SendPing(PlayerPingMsg msg);
 
     void OnPlayerSpeaks(Action<PlayerSpeaksEvent> callback);
     void OnMirrorMessage(Action<MirrorMessageEvent> callback);

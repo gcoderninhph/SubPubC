@@ -135,3 +135,9 @@ message PlayerOnlineStatusMsg {
     int64 player_id = 1;
     bool is_online = 2;
 }
+
+// Topic: PlayerSpeaks.Ping (Client -> Router -> Server via Natify)
+
+message PlayerPingMsg {
+    int64 player_id = 1;
+}

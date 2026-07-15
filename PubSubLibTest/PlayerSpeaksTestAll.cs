@@ -88,11 +88,24 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
             udpPingTimeoutMs = 15000
         });
 
-        var module = IPlayerSpeaksClientModule.Create();
+        var module = IPlayerSpeaksClientModule.Create(500);
         client.AddModule(module);
         await client.Login(() => new StringValue { Value = $"{user}_{playerId}" });
         await client.ConnectServer();
         return new PlayerSpeaksClientHandle(client, module);
+    }
+
+    private async Task BringPlayerOnlineAsync(PlayerSpeaksClientHandle handle)
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            handle.Module.Tick();
+            await Task.Delay(200);
+            _manager.Tick();
+            await Task.Delay(100);
+            _manager.Tick();
+            await Task.Delay(100);
+        }
     }
 
     public async Task DisposeAsync()
@@ -127,16 +140,18 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
         serverData.WatcherId = 111L;
+        serverData.DoneInit();
 
         using var handle = await CreateClientAsync("test", playerId);
 
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
-        await Task.Delay(2000);
+
+        await BringPlayerOnlineAsync(handle);
 
         Assert.Equal(111L, clientData!.WatcherId);
 
-        await Task.Delay(2000);
+        await Task.Delay(1000);
 
         serverData.WatcherId = 999;
         serverData.Commit("update_watcher");
@@ -161,13 +176,14 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
+        serverData.DoneInit();
 
         using var handle = await CreateClientAsync("ctest", playerId);
 
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
 
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle);
         Assert.True(serverData.IsOnLine, "serverIsOnLine");
 
         serverData.WatcherId = 777;
@@ -199,21 +215,21 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateServerAsync();
 
         var serverData1 = _manager.CreateData<TestPlayerData>(player1Id);
+        serverData1.DoneInit();
         var serverData2 = _manager.CreateData<TestPlayerData>(player2Id);
+        serverData2.DoneInit();
 
-        // Player 1
         using var handle1 = await CreateClientAsync("p1", player1Id);
         handle1.ClientData.AddData<TestPlayerDataClient>();
         var clientData1 = handle1.ClientData.GetData<TestPlayerDataClient>();
 
-        // Player 2
         using var handle2 = await CreateClientAsync("p2", player2Id);
         handle2.ClientData.AddData<TestPlayerDataClient>();
         var clientData2 = handle2.ClientData.GetData<TestPlayerDataClient>();
 
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle1);
+        await BringPlayerOnlineAsync(handle2);
 
-        // Player 1 commits
         serverData1.WatcherId = 111;
         serverData1.Commit("p1_update");
 
@@ -228,7 +244,6 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         Assert.Equal(111L, clientData1!.WatcherId);
         Assert.NotEqual(111L, clientData2!.WatcherId);
 
-        // Player 2 commits
         serverData2.WatcherId = 222;
         serverData2.Commit("p2_update");
 
@@ -253,15 +268,17 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<TestPlayerData>(playerId);
+        serverData.DoneInit();
         Assert.False(serverData.IsOnLine);
 
         using var handle = await CreateClientAsync("onlineTest", playerId);
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle);
 
         Assert.True(serverData.IsOnLine);
 
         await handle.Client.DisconnectAsync();
-        await Task.Delay(2000);
+        await Task.Delay(500);
+        _manager.Tick();
 
         Assert.False(serverData.IsOnLine);
     }
@@ -276,20 +293,19 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateRouterAsync();
         await CreateServerAsync();
 
-        // pass 1: verify mirror client khớp mirror server
         var serverData = _manager.CreateData<MirrorSendTestMirror>(playerId);
+        serverData.DoneInit();
 
         using var handle = await CreateClientAsync("test", playerId);
         handle.ClientData.AddData<MirrorSendTestMirrorClient>();
         var clientData = handle.ClientData.GetData<MirrorSendTestMirrorClient>();
 
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle);
 
         Assert.NotNull(clientData);
         Assert.Equal(playerId, clientData!.PlayerId);
         Assert.Equal("MirrorSendTestMsg", clientData.DataName);
 
-        // pass 2: gửi ChatMsg → client nhận đúng nội dung
         clientData.OnMessage<ChatMsg>("chat", msg =>
         {
             received = msg;
@@ -315,6 +331,7 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateServerAsync();
 
         var serverData = _manager.CreateData<MirrorSendTestMirror>(playerId);
+        serverData.DoneInit();
         serverData.OnMessage<ChatMsg>("chat", msg =>
         {
             received = msg;
@@ -325,7 +342,7 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         handle.ClientData.AddData<MirrorSendTestMirrorClient>();
         var clientData = handle.ClientData.GetData<MirrorSendTestMirrorClient>();
 
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle);
 
         Assert.NotNull(clientData);
         Assert.Equal(playerId, clientData!.PlayerId);
@@ -351,16 +368,16 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         {
             data.WatcherId = 42;
             data.Commit("default_init");
-            return Task.CompletedTask;
+            return Task.FromResult<Action>(() => { });
         });
-
-        await Task.Delay(3000);
 
         using var handle = await CreateClientAsync("defaultTest", playerId);
 
         handle.ClientData.AddData<TestPlayerDataClient>();
         var clientData = handle.ClientData.GetData<TestPlayerDataClient>();
         Assert.NotNull(clientData);
+
+        await BringPlayerOnlineAsync(handle);
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
@@ -375,7 +392,7 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
     }
 
     [Fact]
-    public async Task FullStack_RemoveAsync_RejectsOnline_RemovesOffline_FiresOnRemove()
+    public async Task Remove_RejectsOnline_RemovesOffline()
     {
         var onlinePlayerId = 99L;
         var offlinePlayerId = 100L;
@@ -384,25 +401,17 @@ public class PlayerSpeaksTestAll : IAsyncLifetime
         await CreateServerAsync();
 
         var dataOnline = _manager.CreateData<TestPlayerData>(onlinePlayerId);
+        dataOnline.DoneInit();
         var dataOffline = _manager.CreateData<TestPlayerData>(offlinePlayerId);
-
-        TestPlayerData? removedData = null;
-        _manager.OnRemove<TestPlayerData>(async data =>
-        {
-            removedData = data;
-            await Task.CompletedTask;
-        });
+        dataOffline.DoneInit();
 
         using var handle = await CreateClientAsync("onlineUser", onlinePlayerId);
-        await Task.Delay(2000);
+        await BringPlayerOnlineAsync(handle);
 
-        var resultOnline = await _manager.RemoveAsync(onlinePlayerId);
-        var resultOffline = await _manager.RemoveAsync(offlinePlayerId);
+        var resultOnline = _manager.Remove(onlinePlayerId);
+        var resultOffline = _manager.Remove(offlinePlayerId);
         Assert.False(resultOnline);
         Assert.True(resultOffline);
-
-        Assert.NotNull(removedData);
-        Assert.Same(dataOffline, removedData);
 
         var afterOnline = _manager.GetData<TestPlayerData>(onlinePlayerId);
         var afterOffline = _manager.GetData<TestPlayerData>(offlinePlayerId);

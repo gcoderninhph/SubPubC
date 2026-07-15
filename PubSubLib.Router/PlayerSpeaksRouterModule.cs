@@ -12,6 +12,7 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
     private IServer? _server;
     private readonly ConcurrentDictionary<long, IConnection> _connections = new();
     private ISubscribe? _clientMsgSub;
+    private ISubscribe? _pingSub;
 
     internal PlayerSpeaksRouterModule(INatifyServer server, string regionId)
     {
@@ -30,12 +31,6 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
                     return;
 
                 _connections[playerId] = conn;
-
-                _natifyClient.SendOnlineStatus(new PlayerOnlineStatusMsg
-                {
-                    PlayerId = playerId,
-                    IsOnline = true
-                });
 
                 _server!.SendOnTcp("PlayerSpeaks.Welcome", conn, new PlayerSpeaksWelcomeMsg
                 {
@@ -67,6 +62,7 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
         _natifyClient.OnMirrorMessage(OnMirrorMessage);
 
         _clientMsgSub = server.SubscribeTcp<ClientMirrorMessage>("PlayerSpeaks.ClientMsg", OnClientMsg);
+        _pingSub = server.SubscribeTcp<PlayerPingMsg>("PlayerSpeaks.Ping", OnClientPing);
     }
 
     private void OnPlayerSpeaks(PlayerSpeaksEvent evt)
@@ -97,5 +93,16 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
     {
         try { _natifyClient.SendClientMsg(msg); }
         catch (Exception ex) { PubSubLog.Error(ex, "OnClientMsg failed"); }
+    }
+
+    private void OnClientPing(IConnection conn, PlayerPingMsg msg)
+    {
+        try
+        {
+            if (_server == null) return;
+            if (!long.TryParse(conn.User.Id, out var playerId)) return;
+            _natifyClient.SendPing(new PlayerPingMsg { PlayerId = playerId });
+        }
+        catch (Exception ex) { PubSubLog.Error(ex, "OnClientPing failed"); }
     }
 }

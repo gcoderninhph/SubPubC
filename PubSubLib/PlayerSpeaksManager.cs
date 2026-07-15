@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Gcoder.Collections;
 using Google.Protobuf;
 using Natify;
 using PubSubLib.Contracts;
@@ -12,33 +13,29 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
     private const string MsgTopic = "PlayerSpeaks.Msg";
     private const string ClientMsgTopic = "PlayerSpeaks.ClientMsg";
     private const string StatusTopic = "PlayerSpeaks.Status";
+    private const string PingTopic = "PlayerSpeaks.Ping";
     private readonly INatifyClient _natify;
 
     private readonly int _playerTimeoutSeconds;
 
-    private readonly int _cleanupIntervalSeconds;
-
-    // private readonly INatifyAdapter _natify;
-    private readonly ConcurrentDictionary<PlayerDataKey, IPlayerData> _data = new();
-    private readonly ConcurrentDictionary<PlayerDataKey, long> _lastActiveTicks = new();
+    private readonly Dictionary<long, Dictionary<string, IPlayerData>> _data = new();
     private readonly ConcurrentQueue<Action> _mainThreadActions = new();
-    private readonly ConcurrentDictionary<string, IDefaultFactory> _defaults = new();
-    private readonly ConcurrentDictionary<string, IRemovalHandler> _removeHandlers = new();
-    private CancellationTokenSource? _cts;
-    private Task? _cleanupTask;
+    private readonly Dictionary<string, IDefaultFactory> _defaults = new();
+    private readonly ITimedCollection<long, PlayerMetaData> _playerTimers;
+    private readonly Dictionary<long, PlayerMetaData> _playerMetaData = new();
     private bool _disposed;
 
     private PlayerSpeaksManager(PlayerSpeakerConfig config)
     {
         _playerTimeoutSeconds = config.PlayerTimeoutSeconds;
-        _cleanupIntervalSeconds = config.PlayerCleanupIntervalSeconds;
         _natify = config.ClientFast ?? throw new InvalidOperationException("ClientFast is null");
 
-        _natify.OnMessage<PlayerOnlineStatusMsg>(StatusTopic, OnOnlineStatus);
-        _natify.OnMessage<ClientMirrorMessage>(ClientMsgTopic, OnClientMsg);
+        _playerTimers = ITimedCollection<long, PlayerMetaData>.NewTimeSortSetSingleThread();
+        _playerTimers.OnExpired += OnPlayerExpired;
 
-        _cts = new CancellationTokenSource();
-        _cleanupTask = Task.Run(() => CleanupLoop(_cts.Token));
+        _natify.OnMessage<PlayerPingMsg>(PingTopic, OnPing);
+        _natify.OnMessage<PlayerOnlineStatusMsg>(StatusTopic, OnStatus);
+        _natify.OnMessage<ClientMirrorMessage>(ClientMsgTopic, OnClientMsg);
     }
 
     internal static IPlayerSpeaksManager Create(PlayerSpeakerConfig config)
@@ -49,12 +46,10 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
     public T CreateData<T>(long playerId) where T : class, IPlayerData, new()
     {
         T data;
-        PlayerDataKey key;
         try
         {
             data = new T();
             ((IPlayerDataInternal)data).SetPlayerId(playerId);
-            key = new PlayerDataKey(data.DataName, playerId);
         }
         catch (Exception ex)
         {
@@ -62,8 +57,9 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
             throw;
         }
 
-        _data[key] = data;
-        _lastActiveTicks[key] = DateTime.UtcNow.Ticks;
+        if (!_data.TryGetValue(playerId, out var playerData))
+            _data[playerId] = playerData = new Dictionary<string, IPlayerData>();
+        playerData[data.DataName] = data;
 
         try
         {
@@ -121,18 +117,6 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
             PubSubLog.Error(ex, "CreateData OnMessage registration failed");
         }
 
-        if (data is IOnCreate onCreate)
-        {
-            try
-            {
-                onCreate.OnCreate();
-            }
-            catch (Exception ex)
-            {
-                PubSubLog.Error(ex, "IOnCreate.OnCreate failed");
-            }
-        }
-
         return data;
     }
 
@@ -141,9 +125,11 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         try
         {
             var t = new T();
-            var key = new PlayerDataKey(t.DataName, playerId);
 
-            if (_data.TryGetValue(key, out var existing) && existing is T typed)
+            if (!_data.TryGetValue(playerId, out var playerData))
+                return null;
+
+            if (playerData.TryGetValue(t.DataName, out var existing) && existing is T typed)
                 return typed;
 
             return null;
@@ -155,12 +141,12 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         }
     }
 
-    public void OnDefault<T>(Func<T, Task>? callback) where T : class, IPlayerData, new()
+    public void OnDefault<T>(Func<T, Task<Action>> callback) where T : class, IPlayerData, new()
     {
         try
         {
             var t = new T();
-            _defaults[t.DataName] = new DefaultFactory<T>(t.DataName, callback);
+            _defaults[t.DataName] = new DefaultFactory<T>(t.DataName, callback, _mainThreadActions);
         }
         catch (Exception ex)
         {
@@ -168,42 +154,22 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         }
     }
 
-    public void OnRemove<T>(Func<T, Task>? callback) where T : class, IPlayerData, new()
+    public bool Remove(long playerId)
     {
         try
         {
-            var t = new T();
-            _removeHandlers[t.DataName] = new RemovalHandler<T>(t.DataName, callback);
-        }
-        catch (Exception ex)
-        {
-            PubSubLog.Error(ex, "OnRemove<T> failed");
-        }
-    }
-
-    public async Task<bool> RemoveAsync(long playerId)
-    {
-        try
-        {
-            var keys = new List<PlayerDataKey>();
-            foreach (var kv in _data)
-            {
-                if (kv.Key.PlayerId == playerId)
-                    keys.Add(kv.Key);
-            }
-
-            if (keys.Count == 0)
+            if (!_data.TryGetValue(playerId, out var playerData))
                 return false;
 
-            foreach (var key in keys)
+            foreach (var data in playerData.Values)
             {
-                if (_data.TryGetValue(key, out var existing) && existing.IsOnLine)
+                if (data.IsOnLine)
                     return false;
             }
 
-            foreach (var key in keys)
+            foreach (var data in playerData.Values)
             {
-                if (_data.TryGetValue(key, out var data) && data is IOnRemove onRemove)
+                if (data is IOnRemove onRemove)
                 {
                     try
                     {
@@ -214,113 +180,44 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                         PubSubLog.Error(ex, "IOnRemove.OnRemove failed");
                     }
                 }
-
-                if (_data.TryRemove(key, out data))
-                {
-                    if (_removeHandlers.TryGetValue(key.DataName, out var handler))
-                    {
-                        try
-                        {
-                            await handler.HandleAsync(data);
-                        }
-                        catch (Exception ex)
-                        {
-                            PubSubLog.Error(ex, "RemoveAsync OnRemove failed");
-                        }
-                    }
-
-                    if (data is IPlayerDataInternal di)
-                        di.SetOnline(false);
-
-                    _lastActiveTicks.TryRemove(key, out _);
-                }
             }
 
+            _data.Remove(playerId);
             return true;
         }
         catch (Exception ex)
         {
-            PubSubLog.Error(ex, "RemoveAsync failed");
+            PubSubLog.Error(ex, "Remove failed");
             return false;
         }
     }
 
-    private async Task OnOnlineStatus(Data<PlayerOnlineStatusMsg> args)
+    private Task OnPing(Data<PlayerPingMsg> args)
+    {
+        try
+        {
+            var playerId = args.Value.PlayerId;
+            _mainThreadActions.Enqueue(() => ProcessPing(playerId));
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "OnPing failed");
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task OnStatus(Data<PlayerOnlineStatusMsg> args)
     {
         try
         {
             var msg = args.Value;
-
-            if (msg.IsOnline)
-            {
-                foreach (var kv in _defaults)
-                {
-                    var key = new PlayerDataKey(kv.Key, msg.PlayerId);
-                    if (!_data.ContainsKey(key))
-                    {
-                        try
-                        {
-                            await kv.Value.CreateAndInitAsync(msg.PlayerId, this);
-                        }
-                        catch (Exception ex)
-                        {
-                            PubSubLog.Error(ex, $"Auto-create {kv.Key} failed");
-                        }
-                    }
-                }
-            }
-
-            foreach (var kv in _data)
-            {
-                if (kv.Key.PlayerId == msg.PlayerId)
-                {
-                    try
-                    {
-                        if (kv.Value is IPlayerDataInternal di)
-                            di.SetOnline(msg.IsOnline);
-                        if (msg.IsOnline)
-                            _lastActiveTicks[kv.Key] = DateTime.UtcNow.Ticks;
-                    }
-                    catch (Exception ex)
-                    {
-                        PubSubLog.Error(ex, "OnOnlineStatus SetOnline failed");
-                    }
-                }
-            }
-
-            foreach (var kv in _data)
-            {
-                if (kv.Key.PlayerId == msg.PlayerId)
-                {
-                    if (msg.IsOnline && kv.Value is IOnClientConnect onConnect)
-                    {
-                        try
-                        {
-                            onConnect.OnClientConnect();
-                        }
-                        catch (Exception ex)
-                        {
-                            PubSubLog.Error(ex, "IOnClientConnect failed");
-                        }
-                    }
-                    else if (!msg.IsOnline && kv.Value is IOnClientDisconnect onDisconnect)
-                    {
-                        try
-                        {
-                            onDisconnect.OnClientDisconnect();
-                        }
-                        catch (Exception ex)
-                        {
-                            PubSubLog.Error(ex, "IOnClientDisconnect failed");
-                        }
-                    }
-                }
-            }
+            _mainThreadActions.Enqueue(() => ProcessStatus(msg));
         }
         catch (Exception ex)
         {
-            PubSubLog.Error(ex, "OnOnlineStatus failed");
+            PubSubLog.Error(ex, "OnStatus failed");
         }
+        return Task.CompletedTask;
     }
 
     private void OnClientMsg(Data<ClientMirrorMessage> args)
@@ -328,20 +225,33 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         try
         {
             var msg = args.Value;
-            var key = new PlayerDataKey(msg.DataName, msg.PlayerId);
-            if (_data.TryGetValue(key, out var data) && data is IPlayerDataInternal di)
+            _mainThreadActions.Enqueue(() =>
             {
-                if (msg.Subject == "__player_speaks_init__")
+                try
                 {
-                    data.Commit("init");
+                    if (!_data.TryGetValue(msg.PlayerId, out var playerData))
+                        return;
+                    if (!playerData.TryGetValue(msg.DataName, out var dataObj))
+                        return;
+                    if (dataObj is not IPlayerDataInternal di)
+                        return;
+
+                    if (msg.Subject == "__player_speaks_init__")
+                    {
+                        dataObj.Commit("init");
+                    }
+                    else
+                    {
+                        var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
+                        foreach (var a in actions)
+                            _mainThreadActions.Enqueue(a);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
-                    foreach (var a in actions)
-                        _mainThreadActions.Enqueue(a);
+                    PubSubLog.Error(ex, "OnClientMsg handler failed");
                 }
-            }
+            });
         }
         catch (Exception ex)
         {
@@ -362,132 +272,160 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
                 PubSubLog.Error(ex, "Tick action failed");
             }
         }
+
+        _playerTimers.Tick();
     }
 
-    private async Task CleanupLoop(CancellationToken ct)
+    private void ProcessPing(long playerId)
     {
-        while (!ct.IsCancellationRequested)
+        try
         {
-            try
+            if (!_playerMetaData.TryGetValue(playerId, out var meta))
             {
-                await Task.Delay(_cleanupIntervalSeconds * 1000, ct);
-                var now = DateTime.UtcNow.Ticks;
-                var timeout = _playerTimeoutSeconds * TimeSpan.TicksPerSecond;
+                meta = new PlayerMetaData { LastPingTicks = DateTime.UtcNow.Ticks };
+                _playerMetaData[playerId] = meta;
+                _playerTimers.AddOrUpdate(playerId, meta, TimeSpan.FromSeconds(_playerTimeoutSeconds));
 
-                foreach (var kv in _lastActiveTicks)
+                foreach (var kv in _defaults)
                 {
-                    if (now - kv.Value > timeout)
+                    try
                     {
-                        if (_data.TryGetValue(kv.Key, out var stale) && stale is IOnRemove onRemove)
+                        kv.Value.CreateAndInit(playerId, this);
+                    }
+                    catch (Exception ex)
+                    {
+                        PubSubLog.Error(ex, $"Auto-create {kv.Key} failed");
+                    }
+                }
+
+                if (_data.TryGetValue(playerId, out var playerData))
+                {
+                    foreach (var data in playerData.Values)
+                    {
+                        try
                         {
-                            try
+                            if (data is IPlayerDataInternal di)
                             {
-                                onRemove.OnRemove();
-                            }
-                            catch (Exception ex)
-                            {
-                                PubSubLog.Error(ex, "IOnRemove.OnRemove failed");
+                                di.SetOnline(true);
+                                if (di.IsInitDone && data is IOnClientConnect onConnect)
+                                    onConnect.OnClientConnect();
                             }
                         }
-
-                        if (_data.TryRemove(kv.Key, out stale))
+                        catch (Exception ex)
                         {
-                            if (_removeHandlers.TryGetValue(kv.Key.DataName, out var handler))
-                            {
-                                try
-                                {
-                                    await handler.HandleAsync(stale);
-                                }
-                                catch (Exception ex)
-                                {
-                                    PubSubLog.Error(ex, "CleanupLoop OnRemove failed");
-                                }
-                            }
-
-                            if (stale is IPlayerDataInternal di)
-                                di.SetOnline(false);
+                            PubSubLog.Error(ex, "SetOnline/OnClientConnect failed");
                         }
-
-                        _lastActiveTicks.TryRemove(kv.Key, out _);
                     }
                 }
             }
-            catch (TaskCanceledException)
+            else
             {
-                break;
-            }
-            catch (Exception ex)
-            {
-                PubSubLog.Error(ex, "CleanupLoop failed");
+                meta.LastPingTicks = DateTime.UtcNow.Ticks;
+                _playerTimers.AddOrUpdate(playerId, meta, TimeSpan.FromSeconds(_playerTimeoutSeconds));
             }
         }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "ProcessPing failed");
+        }
+    }
+
+    private void ProcessStatus(PlayerOnlineStatusMsg msg)
+    {
+        try
+        {
+            if (!msg.IsOnline)
+                DisconnectPlayer(msg.PlayerId);
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "ProcessStatus failed");
+        }
+    }
+
+    private void DisconnectPlayer(long playerId)
+    {
+        try
+        {
+            _playerMetaData.Remove(playerId);
+            _playerTimers.Remove(playerId);
+
+            if (_data.TryGetValue(playerId, out var playerData))
+            {
+                foreach (var data in playerData.Values)
+                {
+                    try
+                    {
+                        if (data is IPlayerDataInternal di)
+                            di.SetOnline(false);
+                        if (data is IOnClientDisconnect onDisconnect)
+                            onDisconnect.OnClientDisconnect();
+                    }
+                    catch (Exception ex)
+                    {
+                        PubSubLog.Error(ex, "DisconnectPlayer hook failed");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PubSubLog.Error(ex, "DisconnectPlayer failed");
+        }
+    }
+
+    private void OnPlayerExpired(IReadOnlyList<(long, PlayerMetaData)> items)
+    {
+        foreach (var (playerId, _) in items)
+            DisconnectPlayer(playerId);
     }
 
     private interface IDefaultFactory
     {
         string DataName { get; }
-        Task<IPlayerData> CreateAndInitAsync(long playerId, PlayerSpeaksManager manager);
+        void CreateAndInit(long playerId, PlayerSpeaksManager manager);
     }
 
     private sealed class DefaultFactory<T> : IDefaultFactory where T : class, IPlayerData, new()
     {
-        private readonly Func<T, Task>? _callback;
+        private readonly Func<T, Task<Action>>? _callback;
+        private readonly ConcurrentQueue<Action> _mainThreadActions;
         public string DataName { get; }
 
-        public DefaultFactory(string dataName, Func<T, Task>? callback)
+        public DefaultFactory(string dataName, Func<T, Task<Action>>? callback, ConcurrentQueue<Action> mainThreadActions)
         {
             DataName = dataName;
             _callback = callback;
+            _mainThreadActions = mainThreadActions;
         }
 
-        public async Task<IPlayerData> CreateAndInitAsync(long playerId, PlayerSpeaksManager manager)
+        public void CreateAndInit(long playerId, PlayerSpeaksManager manager)
         {
             var data = manager.CreateData<T>(playerId);
+
             if (_callback != null)
             {
-                try
+                var task = _callback(data);
+                task.ContinueWith(t =>
                 {
-                    await _callback(data);
-                }
-                catch (Exception ex)
-                {
-                    PubSubLog.Error(ex, "OnDefault callback failed");
-                }
+                    if (t.IsCompletedSuccessfully && t.Result != null)
+                    {
+                        _mainThreadActions.Enqueue(() =>
+                        {
+                            try { t.Result(); }
+                            catch (Exception ex) { PubSubLog.Error(ex, "OnDefault action failed"); }
+                            data.DoneInit();
+                        });
+                    }
+                    else
+                    {
+                        _mainThreadActions.Enqueue(() => data.DoneInit());
+                    }
+                });
             }
-
-            return data;
-        }
-    }
-
-    private interface IRemovalHandler
-    {
-        string DataName { get; }
-        Task HandleAsync(IPlayerData data);
-    }
-
-    private sealed class RemovalHandler<T> : IRemovalHandler where T : class, IPlayerData
-    {
-        private readonly Func<T, Task>? _callback;
-        public string DataName { get; }
-
-        public RemovalHandler(string dataName, Func<T, Task>? callback)
-        {
-            DataName = dataName;
-            _callback = callback;
-        }
-
-        public async Task HandleAsync(IPlayerData data)
-        {
-            if (_callback != null && data is T typed)
+            else
             {
-                try
-                {
-                    await _callback(typed);
-                }
-                catch (Exception ex)
-                {
-                    PubSubLog.Error(ex, "OnRemove callback failed");
-                }
+                _mainThreadActions.Enqueue(() => data.DoneInit());
             }
         }
     }
@@ -497,12 +435,9 @@ internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
         if (_disposed) return;
         _disposed = true;
 
-        _cts?.Cancel();
-        _cleanupTask?.Wait(TimeSpan.FromSeconds(5));
-        _cts?.Dispose();
-
+        _playerMetaData.Clear();
+        _playerTimers.Dispose();
         _data.Clear();
-        _lastActiveTicks.Clear();
         await _natify.DisposeAsync();
     }
 }
