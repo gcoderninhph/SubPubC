@@ -36,6 +36,8 @@ internal sealed class PlayerSpeaksRouterModule : IPlayerSpeaksRouterModule
                 {
                     PlayerId = playerId
                 });
+
+                _natifyClient.SendPing(new PlayerPingMsg { PlayerId = playerId });
             }
             catch (Exception ex) { PubSubLog.Error(ex, "OnConnect failed"); }
         });
