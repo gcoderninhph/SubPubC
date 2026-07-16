@@ -14,7 +14,7 @@ Thư viện **Spatial Pub/Sub** cho game server viết bằng .NET. Theo dõi th
 
 | Thành phần | Package | Vai trò |
 |------------|---------|---------|
-| **Server** | `PubSubLib` | Sở hữu lưới không gian chính thống (authoritative). Tạo/di chuyển/hủy unit, quản lý watcher, quản lý dữ liệu player (IPlayerSpeaksManager). PubSubLog + try-catch toàn hệ thống. |
+| **Server** | `PubSubLib` | Sở hữu lưới không gian chính thống (authoritative). Tạo/di chuyển/hủy unit, quản lý watcher, quản lý dữ liệu player (IPlayerSpeaksManager). Ping-based lifecycle, ITimedCollection expiration. PubSubLog + try-catch toàn hệ thống. |
 | **Router** | `PubSubLib.Router` | Cầu nối giữa game client và PubSub server. Map connection → watcherId, forward command lên NATS, demux event xuống từng client. |
 | **Client** | `PubSubLib.Client` | Chạy trong Unity/game process. Ping định kỳ để đồng bộ trạng thái, nhận event từ server để tạo/hủy GameObject. |
 
@@ -107,7 +107,7 @@ using Natify;
 using PubSubLib;
 
 // Kết nối NATS
-var natifyClient = new NatifyClientFast("nats://localhost:4222",
+var natifyClient = await INatifyClient.CreateFast("nats://localhost:4222",
     "PubSubServer", "ServerGroup", "VN", "Router");
 
 // Tạo PubSub + gắn Natify
@@ -142,18 +142,19 @@ server.OnLogin<LoginBody>(body =>
 });
 
 // NATS bridge
-var natifyServer = new NatifyServer("nats://localhost:4222",
+var natifyServer = await INatifyServer.CreateAsync("nats://localhost:4222",
     "Router", "RouterGroup", "PubSubServer");
 
 // Gắn router module — map connection ↔ watcherId
-server.AddModule(IPubSubRouterModule.Create(natifyServer, "VN"));
+var routerModule = IPlayerSpeaksRouterModule.Create(natifyServer, "VN");
+server.AddModule(routerModule);
 ```
 
 **Luồng Router:**
-- Khi client connect → Router gửi `AddWatcher` lên Server qua NATS (watcherId = `connection.User.Id`)
-- Khi client disconnect → Router gửi `RemoveWatcher`
-- Khi client gửi `PubSub.Cmd` (MoveWatcher, PingUnits, PublishEvent) qua UDP → Router gán `watcherId`, forward lên NATS
-- Khi nhận `PubSub.Evt` từ NATS → Router demux đến đúng client TCP dựa trên `watcherId`
+- Khi client connect → Router gửi `PlayerSpeaksWelcomeMsg` đến client + `PlayerPingMsg` lên NATS để kích hoạt online ngay
+- Khi client disconnect → Router gửi `PlayerOnlineStatusMsg(IsOnline=false)` lên NATS
+- Khi client gửi `PlayerPingMsg` qua TCP → Router forward lên NATS
+- Khi nhận `PlayerSpeaksEvent` từ NATS → Router demux đến đúng client TCP dựa trên `playerId`
 
 #### Client (Unity / Game Client)
 
@@ -269,11 +270,13 @@ SubPubC.sln
 │   ├── EventChannel.cs       # Worker thread (Channel<Action>)
 │   ├── Cell.cs               # Grid cell
 │   ├── PubSubNatifySync.cs   # NATS bridge (inbound/outbound)
-│   ├── IPlayerSpeaksManager.cs  # Quản lý dữ liệu player (CreateData, RemoveAsync, GetData)
-│   ├── PlayerSpeaksManager.cs   # Implementation với OnDefault/OnRemove + CleanupLoop
-│   ├── IPlayerData.cs        # Interface cho dữ liệu player (DataName)
-│   ├── PubSubLog.cs          # Static logger class
-│   └── Messages/             # Protobuf definitions
+│   ├── IPlayerSpeaksManager.cs  # Quản lý dữ liệu player (CreateData, Remove, GetData, OnDefault)
+│   ├── PlayerSpeaksManager.cs   # Implementation: nested dict, ITimedCollection, single-thread
+│   ├── IPlayerData.cs            # Interface cho dữ liệu player (DataName, DoneInit)
+│   ├── IPlayerDataInternal.cs   # Internal: IsInitDone, SetOnline, SetPlayerId
+│   ├── PlayerMetaData.cs        # Internal: LastPingTicks tracking
+│   ├── PubSubLog.cs             # Static logger class
+│   └── Messages/                # Protobuf definitions
 │
 ├── PubSubLib.Client/         # Game client module (netstandard2.1, Unity IL2CPP)
 │   ├── IPubSubClient.cs       # Client interface (Tick, MoveWatcher, AddProvider)
@@ -308,11 +311,11 @@ SubPubC.sln
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.8" />  <!-- Source generator -->
-<PackageReference Include="PubSubLib" Version="1.51.5" />                    <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="1.8.5" />             <!-- Game client -->
-<PackageReference Include="PubSubLib.Router" Version="1.4.1" />             <!-- NATS bridge -->
-<PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />          <!-- Protobuf messages -->
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="2.0.0" />  <!-- Source generator -->
+<PackageReference Include="PubSubLib" Version="2.0.0" />                    <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="2.0.0" />             <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="2.0.0" />             <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="2.0.0" />          <!-- Protobuf messages -->
 ```
 
 ## Build & Test

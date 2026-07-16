@@ -27,8 +27,8 @@ Roslyn Incremental Source Generator tự động sinh code mirror proto từ cla
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Mirror.Generator" Version="1.19.3" />
-<PackageReference Include="PubSubLib.Contracts" Version="1.5.1" />
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="2.0.0" />
+<PackageReference Include="PubSubLib.Contracts" Version="2.0.0" />
 ```
 
 Generator hoạt động ở compile-time — không cần runtime dependency ngoài `PubSubLib.Contracts` (chứa attribute definitions). Target `netstandard2.0`, tương thích Unity IL2CPP.
@@ -45,6 +45,7 @@ Bạn viết                              Generator sinh ra
                                        Field → Property mapping
                                        Dirty tracking
                                        Auto-commit qua MirrorProtoBus
+                                       DoneInit() — kích hoạt OnCreate + OnClientConnect
 
   + [MirrorProtoClient(typeof(Msg))] → Implement IPlayerMirrorClient
                                         Field → Read-only property
@@ -82,6 +83,7 @@ public sealed class MirrorProtoAttribute : Attribute
 - Implement `IPlayerData` + `IPlayerDataInternal`
 - Property get/set cho scalar, `MirrorRepeatedList<T>` cho repeated
 - `Commit(string)` — serialize thay đổi, gửi qua NATS
+- `DoneInit()` — public method, kiểm tra `IsInitDone`, fire `IOnCreate.OnCreate()`, nếu online thì fire `IOnClientConnect.OnClientConnect()`
 - `OnChange` / `OnMessage` / `SendMessage` callbacks
 - `PlayerId`, `IsOnLine`, `DataName` tự động
 

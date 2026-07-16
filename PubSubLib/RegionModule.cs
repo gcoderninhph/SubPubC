@@ -10,7 +10,7 @@ internal sealed class RegionModule : IRegionModule
     private readonly IPubSub _pubSub;
     private readonly INatifyClient? _natifyAdapter;
     private readonly Dictionary<UnitKey, object> _units = new();
-    private readonly Dictionary<string, Delegate> _factories = new();
+    
     private ISubscrible? _subBatchEnter;
     private ISubscrible? _subBatchLeave;
     private ISubscrible? _subSyncEnter;
@@ -45,39 +45,6 @@ internal sealed class RegionModule : IRegionModule
             _subUnitEvent = _pubSub.OnUnitEvent(unitEvent);
         }
     }
-
-    public void RegisterUnitType<T, TR>(string unitType, Func<TR>? factory = null)
-        where T : class, IRegionUnit<TR>, new()
-        where TR : class, IAlive
-    {
-        _factories[unitType] = factory ?? (() => default!);
-    }
-
-    // ===== Inbound Region commands =====
-
-    private void HandleCreateUnitCmd(CreateUnitCmd cmd)
-    {
-        if (!_factories.TryGetValue(cmd.UnitType, out var factoryDel))
-            return;
-
-        var target = (IAlive)factoryDel.DynamicInvoke(null)!;
-
-        _pubSub.CreateUnit(cmd.UnitId, cmd.UnitType,
-            new Vector2 { x = cmd.PosX, y = cmd.PosY },
-            target, u =>
-            {
-                if (cmd.Data != null)
-                    u.Data = cmd.Data.ToByteArray();
-            });
-    }
-
-    private void HandleDestroyUnitCmd(DestroyUnitCmd cmd)
-    {
-        var unit = _pubSub.GetUnitOfByType(cmd.UnitType, cmd.UnitId);
-        if (unit != null)
-            unit.Destroy();
-    }
-
     // ===== Inbound PubSub commands =====
 
     private void OnPubSubCommand(Data<PubSubCommand> data)
@@ -98,9 +65,6 @@ internal sealed class RegionModule : IRegionModule
                     break;
                 case PubSubCommand.CmdOneofCase.PingUnits:
                     HandlePingUnits(cmd.PingUnits);
-                    break;
-                case PubSubCommand.CmdOneofCase.PublishEvent:
-                    HandlePublishEvent(cmd.PublishEvent);
                     break;
             }
         }
@@ -140,13 +104,6 @@ internal sealed class RegionModule : IRegionModule
         }
 
         _pubSub.WatcherPingUnits(cmd.WatcherId, typeVersions);
-    }
-
-    private void HandlePublishEvent(PublishEventCmd cmd)
-    {
-        var unit = _pubSub.GetUnitOfByType(cmd.UnitType, cmd.UnitId);
-        if (unit != null)
-            unit.PublishEvent(cmd.EventName, cmd.Data?.ToByteArray(), !cmd.UseUdp);
     }
 
     // ===== Outbound PubSub events (After* hooks) =====

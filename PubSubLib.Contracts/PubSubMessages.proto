@@ -78,7 +78,6 @@ message PubSubCommand {
         RemoveWatcherCmd remove_watcher = 2;
         MoveWatcherCmd move_watcher = 3;
         PingUnitsCmd ping_units = 4;
-        PublishEventCmd publish_event = 5;
     }
 }
 
@@ -103,14 +102,6 @@ message MoveWatcherCmd {
 message PingUnitsCmd {
     int64 watcher_id = 1;
     repeated TypeGroup units = 2;
-}
-
-message PublishEventCmd {
-    int64 unit_id = 1;
-    string unit_type = 2;
-    string event_name = 3;
-    bytes data = 4;
-    bool use_udp = 5;
 }
 
 // ===== PlayerSpeaks =====

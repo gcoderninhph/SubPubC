@@ -2,7 +2,7 @@
 
 ## MyConnection
 
-MyConnection is an external NuGet dependency (version 1.0.4). When you need information about its interfaces, read the full API reference at:
+MyConnection is an external NuGet dependency (version 1.0.5). When you need information about its interfaces, read the full API reference at:
 
 https://github.com/gcoderninhph/MyConnection/blob/master/README.md
 

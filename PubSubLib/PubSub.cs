@@ -36,9 +36,22 @@ internal sealed class PubSub : IPubSub, IPubSubInternal
         return p;
     }
 
-    public IUnit? GetUnitOfByType(string type, long id)
+    public Task<IUnit?> GetUnitOfByTypeAsync(string type, long id)
     {
-        return _units.TryGetValue(new UnitKey(id, type), out var unit) ? unit : null;
+        var tcs = new TaskCompletionSource<IUnit?>();
+        _channel.Enqueue(() =>
+        {
+            try
+            {
+                tcs.SetResult(
+                    _units.TryGetValue(new UnitKey(id, type), out var unit) ? unit : null);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+        return tcs.Task;
     }
 
     // ===== IPubSub =====

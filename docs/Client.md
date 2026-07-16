@@ -49,7 +49,7 @@ Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Client" Version="1.8.1" />
+<PackageReference Include="PubSubLib.Client" Version="2.0.0" />
 ```
 
 Package target `netstandard2.1` — tương thích Unity IL2CPP.
@@ -360,21 +360,24 @@ Module cắm vào MyConnection client để quản lý kết nối player speaks
 ```csharp
 public interface IPlayerSpeaksClientModule : IClientModule, IDisposable
 {
-    static IPlayerSpeaksClientModule Create();
+    static IPlayerSpeaksClientModule Create(int pingIntervalMs = 2000);
     IPlayerSpeaksClient Get();
+    void Tick();
 }
 ```
 
 | Phương thức | Mô tả |
 |-------------|-------|
-| `Create()` | Static factory — tạo module mới |
+| `Create(pingIntervalMs)` | Static factory — tạo module mới với tần suất ping (ms). Mặc định 2000ms. |
 | `Get()` | Lấy `IPlayerSpeaksClient` để gọi `AddData<T>()`, `GetData<T>()`, `RemoveData<T>()` |
+| `Tick()` | Gọi định kỳ (mỗi frame). Gửi `PlayerPingMsg` qua TCP khi đến hạn ping. |
+| `Dispose()` | Hủy đăng ký TCP subscriber, dispose inner `IPlayerSpeaksClient` |
 
 **Ví dụ sử dụng:**
 
 ```csharp
-// Tạo module
-var playerSpeaksModule = IPlayerSpeaksClientModule.Create();
+// Tạo module với ping 500ms
+var playerSpeaksModule = IPlayerSpeaksClientModule.Create(500);
 var playerSpeaks = playerSpeaksModule.Get();
 
 // Đăng ký nhận mirror dữ liệu PlayerProfile từ server
@@ -392,6 +395,9 @@ playerSpeaks.RemoveData<PlayerProfileClient>();
 
 // Gắn module vào client
 client.AddModule(playerSpeaksModule);
+
+// Game loop — gọi Tick() mỗi frame:
+// playerSpeaksModule.Tick();
 ```
 
 ---
@@ -672,13 +678,14 @@ Client gửi message lên server:
 ```
 
 **Luồng hoàn chỉnh:**
-1. Server tạo `IPlayerData` qua `manager.CreateData<T>(playerId)`
+1. Server tạo `IPlayerData` qua `manager.CreateData<T>(playerId)` + `data.DoneInit()`
 2. Client đăng ký mirror type qua `playerSpeaks.AddData<T>()`
-3. Khi player connect → Router gửi `PlayerOnlineStatusMsg(IsOnline=true)` → Server set `IsOnLine = true`
-4. Server `Commit("init")` → dữ liệu serialize → NATS → Router → TCP → Client `ApplyUpdate(data, "init")`
-5. Khi dữ liệu thay đổi, server `Commit("update")` → client nhận `ApplyUpdate` với commit message
-6. Khi player disconnect → Router gửi `PlayerOnlineStatusMsg(IsOnline=false)` → Server set `IsOnLine = false`
-7. Sau `PlayerTimeoutSeconds`, `CleanupLoop` gọi `OnRemove<T>` rồi xóa dữ liệu
+3. Client kết nối → Router gửi `PlayerPingMsg` lên NATS → Server `ProcessPing` → tạo defaults + set online
+4. Client định kỳ gửi `PlayerPingMsg` qua TCP → Router forward NATS → Server refresh timer
+5. Server `Commit("init")` → dữ liệu serialize → NATS → Router → TCP → Client `ApplyUpdate(data, "init")`
+6. Khi dữ liệu thay đổi, server `Commit("update")` → client nhận `ApplyUpdate` với commit message
+7. Khi player disconnect → Router gửi `PlayerOnlineStatusMsg(IsOnline=false)` → Server set `IsOnLine = false` + xóa timer
+8. Sau `PlayerTimeoutSeconds`, ITimedCollection expiration → `DisconnectPlayer` xóa dữ liệu
 
 ---
 

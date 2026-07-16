@@ -6,7 +6,7 @@ using PubSubLib.Messages;
 
 namespace PubSubLib.Client;
 
-internal sealed class RegionClientModule : IRegionClientModule, IDisposable
+internal sealed class RegionClientModule : IRegionClientModule
 {
     private IClient? _client;
     private ISubscribe? _tcpSubPubSub;
