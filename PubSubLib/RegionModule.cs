@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Google.Protobuf;
 using Natify;
 using PubSubLib.Contracts;
@@ -10,7 +11,8 @@ internal sealed class RegionModule : IRegionModule
     private readonly IPubSub _pubSub;
     private readonly INatifyClient? _natifyAdapter;
     private readonly Dictionary<UnitKey, object> _units = new();
-    
+    private readonly ConcurrentQueue<Action> _unitEventQueue = new();
+
     private ISubscrible? _subBatchEnter;
     private ISubscrible? _subBatchLeave;
     private ISubscrible? _subSyncEnter;
@@ -213,8 +215,7 @@ internal sealed class RegionModule : IRegionModule
             if (target is IRegionUnitOnStart os)
                 os.OnUnitStart();
 
-            _units[new UnitKey(id, unitType)] = wrapper;
-
+            _unitEventQueue.Enqueue(() => { _units[new UnitKey(id, unitType)] = wrapper; });
             tcs.SetResult(wrapper);
         });
 
@@ -311,24 +312,45 @@ internal sealed class RegionModule : IRegionModule
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
-        var wrapper = new T();
-        var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
-        var key = new UnitKey(id, unitType);
+        _unitEventQueue.Enqueue(() =>
+        {
+            var wrapper = new T();
+            var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
+            var key = new UnitKey(id, unitType);
 
-        if (!_units.TryGetValue(key, out var obj) || obj is not T t)
-            return;
+            if (!_units.TryGetValue(key, out var obj) || obj is not T t)
+                return;
 
-        var internalWrapper = (IRegionUnitInternal)t;
-        var iu = internalWrapper.GetUnit();
-        var target = iu?.Target as TR;
+            var internalWrapper = (IRegionUnitInternal)t;
+            var iu = internalWrapper.GetUnit();
+            var target = iu?.Target as TR;
 
-        if (target is IRegionUnitOnDestroy od)
-            od.OnUnitDestroy();
+            if (target is IRegionUnitOnDestroy od)
+                od.OnUnitDestroy();
 
-        if (iu != null)
-            iu.Destroy();
+            if (iu != null)
+                iu.Destroy();
 
-        _units.Remove(key);
+            _units.Remove(key);
+        });
+    }
+
+    public void Tick()
+    {
+        while (_unitEventQueue.TryDequeue(out var action))
+        {
+            if (action != null)
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    PubSubLog.Error(ex, "Tick action failed");
+                }
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()

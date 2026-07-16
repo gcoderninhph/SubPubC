@@ -285,6 +285,7 @@ public class RegionTestFullStack : IAsyncLifetime
         }
 
         _regionModule.DestroyUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        _regionModule.Tick();
 
         Assert.True(destroyedSignal.Wait(10000), "Stage 2 failed: destroy not received");
     }
@@ -316,6 +317,7 @@ public class RegionTestFullStack : IAsyncLifetime
         Assert.True(serverStartSignal.Wait(5000), "IRegionUnitOnStart.OnUnitStart not called");
 
         _regionModule.DestroyUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        _regionModule.Tick();
 
         Assert.True(serverDestroySignal.Wait(5000), "IRegionUnitOnDestroy.OnUnitDestroy not called");
     }
@@ -862,6 +864,207 @@ public class RegionTestFullStack : IAsyncLifetime
 
         var final3 = Alive(clients[2].RegionClientModule);
         Assert.True(final3.Contains(5L));
+    }
+
+    // ===== Server GetUnit / TryGetUnit / GetUnits =====
+
+    [Fact]
+    public async Task FullStack_Server_GetUnit_ReturnsUnit_AfterTick()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var unitId = 42L;
+        var target = new ServerTarget();
+        _serverTargets[unitId] = target;
+
+        var unit = await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(unitId, V(10, 20), target);
+
+        _regionModule.Tick();
+
+        var found = _regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        Assert.NotNull(found);
+        Assert.Equal(unitId, found!.Id);
+        Assert.Same(unit, found);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnit_ReturnsNull_BeforeTick()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var unitId = 43L;
+        var target = new ServerTarget();
+        _serverTargets[unitId] = target;
+
+        await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(unitId, V(10, 20), target);
+
+        var found = _regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnit_ReturnsNull_ForNonExistentId()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var found = _regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(999);
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_TryGetUnit_True_AfterTick()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var unitId = 44L;
+        var target = new ServerTarget();
+        _serverTargets[unitId] = target;
+
+        var unit = await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(unitId, V(10, 20), target);
+
+        _regionModule.Tick();
+
+        var ok = _regionModule.TryGetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId, out var found);
+        Assert.True(ok);
+        Assert.NotNull(found);
+        Assert.Equal(unitId, found!.Id);
+        Assert.Same(unit, found);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_TryGetUnit_False_ForNonExistentId()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var ok = _regionModule.TryGetUnit<RemoveWatcherUnitServer, ServerTarget>(999, out var found);
+        Assert.False(ok);
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnits_ReturnsAll_AfterTick()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        for (long i = 1; i <= 3; i++)
+        {
+            var target = new ServerTarget();
+            _serverTargets[i] = target;
+            await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(i, V(i * 10, 0), target);
+        }
+
+        _regionModule.Tick();
+
+        var units = _regionModule.GetUnits<RemoveWatcherUnitServer, ServerTarget>();
+        Assert.Equal(3, units.Count);
+        var ids = new HashSet<long>(units.Select(u => u.Id));
+        Assert.Contains(1L, ids);
+        Assert.Contains(2L, ids);
+        Assert.Contains(3L, ids);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnits_Empty_WhenNoUnits()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var units = _regionModule.GetUnits<RemoveWatcherUnitServer, ServerTarget>();
+        Assert.Empty(units);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_DestroyUnit_GetUnitReturnsNull()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var unitId = 50L;
+        var target = new ServerTarget();
+        _serverTargets[unitId] = target;
+
+        await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(unitId, V(10, 20), target);
+        _regionModule.Tick();
+
+        Assert.NotNull(_regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId));
+
+        _regionModule.DestroyUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        _regionModule.Tick();
+
+        Assert.Null(_regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId));
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnits_DecreasesAfterDestroy()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        for (long i = 1; i <= 3; i++)
+        {
+            var target = new ServerTarget();
+            _serverTargets[i] = target;
+            await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(i, V(i * 10, 0), target);
+        }
+
+        _regionModule.Tick();
+        Assert.Equal(3, _regionModule.GetUnits<RemoveWatcherUnitServer, ServerTarget>().Count);
+
+        _regionModule.DestroyUnit<RemoveWatcherUnitServer, ServerTarget>(2);
+        _regionModule.Tick();
+
+        var remaining = _regionModule.GetUnits<RemoveWatcherUnitServer, ServerTarget>();
+        Assert.Equal(2, remaining.Count);
+        var ids = new HashSet<long>(remaining.Select(u => u.Id));
+        Assert.Contains(1L, ids);
+        Assert.Contains(3L, ids);
+        Assert.DoesNotContain(2L, ids);
+    }
+
+    [Fact]
+    public async Task FullStack_Server_GetUnit_PositionAndTarget()
+    {
+        _serverTargets.Clear();
+
+        await CreateRouterAsync();
+        await CreateUnityServerAsync();
+
+        var unitId = 60L;
+        var target = new ServerTarget { IsAlive = true };
+        _serverTargets[unitId] = target;
+
+        var unit = await _regionModule.CreateUnitAsync<RemoveWatcherUnitServer, ServerTarget>(unitId, V(15, 25), target);
+        _regionModule.Tick();
+
+        var found = _regionModule.GetUnit<RemoveWatcherUnitServer, ServerTarget>(unitId);
+        Assert.NotNull(found);
+        Assert.Equal(15f, found!.Position.x);
+        Assert.Equal(25f, found.Position.y);
+        Assert.Same(target, found.Get());
     }
 
     private async Task RunTickLoop(CancellationToken ct)

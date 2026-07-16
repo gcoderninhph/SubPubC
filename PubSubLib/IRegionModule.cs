@@ -24,4 +24,5 @@ public interface IRegionModule : IAsyncDisposable
     IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
 
     void DestroyUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    void Tick();
 }
