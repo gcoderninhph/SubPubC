@@ -49,7 +49,7 @@ Client **không** tự quản lý vị trí unit — mọi thay đổi vị trí
 ## Cài đặt
 
 ```xml
-<PackageReference Include="PubSubLib.Client" Version="2.0.0" />
+<PackageReference Include="PubSubLib.Client" Version="2.0.1" />
 ```
 
 Package target `netstandard2.1` — tương thích Unity IL2CPP.

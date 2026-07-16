@@ -33,7 +33,7 @@ Package chứa toàn bộ logic không gian (spatial grid), quản lý Unit/Watc
 Package multi-target `netstandard2.1` (Unity IL2CPP) và `net9.0` (standalone server):
 
 ```xml
-<PackageReference Include="PubSubLib" Version="2.0.0" />
+<PackageReference Include="PubSubLib" Version="2.0.1" />
 ```
 
 Hoặc project reference:
@@ -187,6 +187,63 @@ public readonly struct UnitKey : IEquatable<UnitKey>
 ```
 
 Dùng trong `SyncLeave` callback và nội bộ `WatcherPingUnits` để định danh unit theo composite key (Id + Type). Unit khác type có thể dùng chung numeric Id.
+
+### IRegionModule
+
+```csharp
+public interface IRegionModule : IAsyncDisposable
+{
+    static IRegionModule Create(RegionConfig config);
+
+    Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, TR target)
+        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    void CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T> callback)
+        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, Func<TR> target)
+        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> target, Action<T> callback)
+        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+
+    T? GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    bool TryGetUnit<T, TR>(long id, out T unit) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+
+    void DestroyUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    void Tick();
+}
+```
+
+| Phương thức | Mô tả |
+|-------------|-------|
+| `Create(config)` | Static factory — tạo instance từ `RegionConfig` |
+| `CreateUnitAsync<T, TR>(id, pos, target)` | Tạo unit với generated mirror wrapper. Trả về `Task<T>` — unit được enqueue vào `_unitEventQueue`, thêm vào `_units` sau khi `Tick()` |
+| `CreateUnit<T, TR>(id, pos, target, callback)` | Version async — callback chạy sau khi unit đã được thêm vào `_units` |
+| `GetUnit<T, TR>(id)` | Lấy unit theo id. **Yêu cầu `Tick()` đã được gọi** — nếu không, trả về `null` vì unit chưa được thêm vào `_units` |
+| `TryGetUnit<T, TR>(id, out unit)` | Version bool của `GetUnit`. **Yêu cầu `Tick()` đã được gọi** |
+| `GetUnits<T, TR>()` | Lấy toàn bộ unit theo type. **Yêu cầu `Tick()` đã được gọi** |
+| `DestroyUnit<T, TR>(id)` | Xóa unit — enqueue vào `_unitEventQueue`, thực sự xóa sau khi `Tick()` |
+| `Tick()` | **Bắt buộc gọi định kỳ** (mỗi frame hoặc mỗi N ms). Drain `_unitEventQueue` — xử lý tất cả thao tác thêm/xóa unit vào `_units` |
+
+> **Ràng buộc quan trọng:** `GetUnit`, `TryGetUnit`, `GetUnits` đọc trực tiếp từ `_units` dictionary. Nhưng `CreateUnitAsync` và `DestroyUnit` chỉ **enqueue** thay đổi — chúng chưa thực sự thêm/xóa `_units` cho đến khi `Tick()` được gọi. Do đó, **bắt buộc gọi `Tick()`** trước khi truy vấn unit.
+
+```csharp
+// Ví dụ: tạo unit rồi query
+var unit = await regionModule.CreateUnitAsync<MyUnit, MyTarget>(42, position, target);
+regionModule.Tick();  // BẮT BUỘC — enqueue add vào _units
+
+var found = regionModule.GetUnit<MyUnit, MyTarget>(42);  // OK — đã có trong _units
+
+// Sai — sẽ trả về null:
+var found2 = regionModule.GetUnit<MyUnit, MyTarget>(42); // null nếu chưa Tick()
+```
+
+```csharp
+// Ví dụ: destroy unit rồi query
+regionModule.DestroyUnit<MyUnit, MyTarget>(42);
+regionModule.Tick();  // BẮT BUỘC — enqueue remove khỏi _units
+
+var found = regionModule.GetUnit<MyUnit, MyTarget>(42);  // null — đã bị xóa
+```
 
 ---
 

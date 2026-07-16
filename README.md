@@ -116,6 +116,27 @@ pubSub.AddNatify(natifyClient);
 
 // Từ đây mọi event (BatchEnter, SyncEnter, UnitEvent...) tự động publish lên NATS PubSub.Evt
 // Mọi command từ client gửi lên PubSub.Cmd được tự động xử lý
+
+// IRegionModule — quản lý unit với generated mirror wrapper
+var regionModule = IRegionModule.Create(new RegionConfig
+{
+    GridSize = 100f,
+    NatifyClient = natifyClient
+});
+
+// Tạo unit — enqueue vào _unitEventQueue, thêm vào _units sau khi Tick()
+var unit = await regionModule.CreateUnitAsync<MyUnit, MyTarget>(42, position, target);
+
+// BẮT BUỘC gọi Tick() mỗi frame — drain queue, cập nhật _units
+regionModule.Tick();
+
+// Query unit — chỉ hoạt động sau khi Tick()
+var found = regionModule.GetUnit<MyUnit, MyTarget>(42);
+var all = regionModule.GetUnits<MyUnit, MyTarget>();
+
+// Destroy — enqueue, thực sự xóa sau khi Tick()
+regionModule.DestroyUnit<MyUnit, MyTarget>(42);
+regionModule.Tick();
 ```
 
 #### Router
@@ -311,11 +332,11 @@ SubPubC.sln
 ## NuGet
 
 ```xml
-<PackageReference Include="PubSubLib.Mirror.Generator" Version="2.0.0" />  <!-- Source generator -->
-<PackageReference Include="PubSubLib" Version="2.0.0" />                    <!-- Core server -->
-<PackageReference Include="PubSubLib.Client" Version="2.0.0" />             <!-- Game client -->
-<PackageReference Include="PubSubLib.Router" Version="2.0.0" />             <!-- NATS bridge -->
-<PackageReference Include="PubSubLib.Contracts" Version="2.0.0" />          <!-- Protobuf messages -->
+<PackageReference Include="PubSubLib.Mirror.Generator" Version="2.0.1" />  <!-- Source generator -->
+<PackageReference Include="PubSubLib" Version="2.0.1" />                    <!-- Core server -->
+<PackageReference Include="PubSubLib.Client" Version="2.0.1" />             <!-- Game client -->
+<PackageReference Include="PubSubLib.Router" Version="2.0.1" />             <!-- NATS bridge -->
+<PackageReference Include="PubSubLib.Contracts" Version="2.0.1" />          <!-- Protobuf messages -->
 ```
 
 ## Build & Test
