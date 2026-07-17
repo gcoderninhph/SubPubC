@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <Version>2.0.2</Version>
     <Authors>PubSubLib</Authors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
