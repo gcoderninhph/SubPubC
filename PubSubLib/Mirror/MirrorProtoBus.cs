@@ -11,10 +11,11 @@ public static class MirrorProtoBus
 {
     private static readonly Channel<Action> _channel = Channel.CreateUnbounded<Action>();
     private static volatile int _suppressCount;
+    private static Task? _task;
 
     static MirrorProtoBus()
     {
-        _ = Task.Run(ProcessLoop);
+        _task ??= Task.Run(ProcessLoop).ContinueWith(_ => { });
     }
 
     public static IDisposable SuppressBackground()
@@ -41,7 +42,8 @@ public static class MirrorProtoBus
         });
     }
 
-    public static void EnqueueMessage<T>(string subject, T data, Action<string, byte[]>? notify) where T : class, IMessage
+    public static void EnqueueMessage<T>(string subject, T data, Action<string, byte[]>? notify)
+        where T : class, IMessage
     {
         _channel.Writer.TryWrite(() =>
         {
@@ -52,11 +54,7 @@ public static class MirrorProtoBus
 
     public static void Flush()
     {
-        while (_channel.Reader.TryRead(out var action))
-        {
-            try { action(); }
-            catch (Exception ex) { PubSubLog.Error(ex, "MirrorProtoBus.Flush action failed"); }
-        }
+        _task ??= Task.Run(ProcessLoop).ContinueWith(_ => { });
     }
 
     private static async Task ProcessLoop()
@@ -71,10 +69,17 @@ public static class MirrorProtoBus
                     await Task.Delay(10);
                     continue;
                 }
+
                 while (reader.TryRead(out var action))
                 {
-                    try { action(); }
-                    catch (Exception ex) { PubSubLog.Error(ex, "MirrorProtoBus.ProcessLoop action failed"); }
+                    try
+                    {
+                        action();
+                    }
+                    catch (Exception ex)
+                    {
+                        PubSubLog.Error(ex, "MirrorProtoBus.ProcessLoop action failed");
+                    }
                 }
             }
         }

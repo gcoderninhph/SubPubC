@@ -219,3 +219,12 @@ message ChatMsg {
 message MirrorSendTestMsg {
     int32 version = 1;
 }
+
+// ===== UnitData Test =====
+
+message UnitDataMsg {
+    string name = 1;
+    string description = 2;
+    int32 health = 3;
+    int32 level = 4;
+}

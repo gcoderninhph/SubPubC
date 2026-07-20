@@ -25,10 +25,3 @@ public interface IPubSub : IDisposable
 
     ISubscrible OnUnitEvent(Action<(List<long> notyWatchId, IUnit units, string eventName, object data, bool reliable)> callBack);
 }
-
-internal interface IPubSubInternal
-{
-    void OnUnitPositionChanged(Unit unit);
-    void OnUnitDestroyed(Unit unit);
-    void PublishEvent(Unit unit, string eventName, object? data, bool reliable);
-}

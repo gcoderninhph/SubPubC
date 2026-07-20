@@ -30,45 +30,11 @@ public interface IRegionModule : IAsyncDisposable
     /// <param name="id">ID duy nhất của unit.</param>
     /// <param name="position">Vị trí ban đầu của unit.</param>
     /// <param name="target">Đối tượng mục tiêu (data) mà unit sẽ giữ.</param>
+    /// <param name="setDefaultValue">hàm set dữ liệu mặc định cho T</param>
     /// <returns>Task chứa wrapper <typeparamref name="T"/> đã được tạo.</returns>
-    Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, TR target)
+    T CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T>? setDefaultValue = null)
         where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-
-    /// <summary>
-    /// Tạo một unit mới và gọi callback khi hoàn thành.
-    /// </summary>
-    /// <typeparam name="T">Kiểu wrapper <see cref="IRegionUnit{TR}"/>.</typeparam>
-    /// <typeparam name="TR">Kiểu đối tượng mục tiêu bên trong unit, phải triển khai <see cref="IAlive"/>.</typeparam>
-    /// <param name="id">ID duy nhất của unit.</param>
-    /// <param name="position">Vị trí ban đầu của unit.</param>
-    /// <param name="target">Đối tượng mục tiêu (data) mà unit sẽ giữ.</param>
-    /// <param name="callback">Callback nhận wrapper <typeparamref name="T"/> sau khi tạo xong.</param>
-    void CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-
-    /// <summary>
-    /// Tạo một unit mới từ factory function một cách bất đồng bộ.
-    /// </summary>
-    /// <typeparam name="T">Kiểu wrapper <see cref="IRegionUnit{TR}"/>.</typeparam>
-    /// <typeparam name="TR">Kiểu đối tượng mục tiêu bên trong unit, phải triển khai <see cref="IAlive"/>.</typeparam>
-    /// <param name="id">ID duy nhất của unit.</param>
-    /// <param name="position">Vị trí ban đầu của unit.</param>
-    /// <param name="target">Factory function trả về đối tượng mục tiêu.</param>
-    /// <returns>Task chứa wrapper <typeparamref name="T"/> đã được tạo.</returns>
-    Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, Func<TR> target)
-        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-
-    /// <summary>
-    /// Tạo một unit mới từ factory function và gọi callback khi hoàn thành.
-    /// </summary>
-    /// <typeparam name="T">Kiểu wrapper <see cref="IRegionUnit{TR}"/>.</typeparam>
-    /// <typeparam name="TR">Kiểu đối tượng mục tiêu bên trong unit, phải triển khai <see cref="IAlive"/>.</typeparam>
-    /// <param name="id">ID duy nhất của unit.</param>
-    /// <param name="position">Vị trí ban đầu của unit.</param>
-    /// <param name="target">Factory function trả về đối tượng mục tiêu.</param>
-    /// <param name="callback">Callback nhận wrapper <typeparamref name="T"/> sau khi tạo xong.</param>
-    void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> target, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
+    
 
     /// <summary>
     /// Lấy unit theo ID. Trả về <c>null</c> nếu không tìm thấy.

@@ -1,17 +1,17 @@
-using System.Collections.Concurrent;
 using Google.Protobuf;
 using Natify;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
+using PubSubLib.Mirror;
 
 namespace PubSubLib;
 
 internal sealed class RegionModule : IRegionModule
 {
     private readonly IPubSub _pubSub;
-    private readonly INatifyClient? _natifyAdapter;
+    private readonly INatifyClient _natifyAdapter;
     private readonly Dictionary<UnitKey, object> _units = new();
-    private readonly ConcurrentQueue<Action> _unitEventQueue = new();
+    private static readonly Dictionary<Type, string> _unitTypeCache = new();
 
     private ISubscrible? _subBatchEnter;
     private ISubscrible? _subBatchLeave;
@@ -25,6 +25,7 @@ internal sealed class RegionModule : IRegionModule
     internal RegionModule(RegionConfig config)
     {
         _pubSub = IPubSub.Create(config);
+        MirrorProtoBus.Flush();
 
         if (config.NatifyClient != null)
         {
@@ -112,6 +113,8 @@ internal sealed class RegionModule : IRegionModule
 
     private void OnPubSubBatchEnter(IUnit unit, List<long> watcherIds)
     {
+        if (unit.Data == null) return;
+
         var data = ByteString.CopyFrom(unit.Data ?? Array.Empty<byte>());
         var msg = new BatchEnterMsg
         {
@@ -144,6 +147,7 @@ internal sealed class RegionModule : IRegionModule
         var msg = new SyncEnterMsg { WatcherId = watcherId };
         foreach (var u in units)
         {
+            if (u?.Data == null) continue;
             var data = ByteString.CopyFrom(u.Data ?? Array.Empty<byte>());
             msg.Units.Add(new UnitEnterItem
             {
@@ -156,6 +160,7 @@ internal sealed class RegionModule : IRegionModule
             });
         }
 
+        if (msg.Units.Count == 0) return;
         _natifyAdapter.Publish(PubSubEvtTopic, new PubSubEvent { SyncEnter = msg });
     }
 
@@ -196,75 +201,44 @@ internal sealed class RegionModule : IRegionModule
 
     // ===== RegionModule public API =====
 
-    public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, TR target)
+    public T CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T>? setDefaultValue = null)
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
         var tcs = new TaskCompletionSource<T>();
         var wrapper = new T();
         var internalWrapper = (IRegionUnitInternal)wrapper;
+        var unitTemplate = new UnitTemplate();
         var unitType = internalWrapper.GetUnitType();
 
-        _pubSub.CreateUnit(id, unitType, position, target, iu =>
+        internalWrapper.SetUnit(unitTemplate);
+        setDefaultValue?.Invoke(wrapper);
+        wrapper.Commit("First Setup");
+
+        unitTemplate.Init += data =>
         {
-            internalWrapper.SetUnit(iu);
-
-            if (target is ISetRegionUnit<T, TR> su)
-                su.SetRegionUnit(wrapper);
-
-            if (target is IRegionUnitOnStart os)
-                os.OnUnitStart();
-
-            _unitEventQueue.Enqueue(() => { _units[new UnitKey(id, unitType)] = wrapper; });
-            tcs.SetResult(wrapper);
-        });
-
-        return tcs.Task;
-    }
-
-    public void CreateUnit<T, TR>(long id, Vector2 position, TR target, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new()
-        where TR : class, IAlive
-    {
-        CreateUnitAsync<T, TR>(id, position, target)
-            .ContinueWith(t =>
+            _pubSub.CreateUnit(id, unitType, position, target, iu =>
             {
-                if (t.IsCompletedSuccessfully)
-                {
-                    try
-                    {
-                        callback(t.Result);
-                    }
-                    catch (Exception ex)
-                    {
-                        PubSubLog.Error(ex, "CreateUnit callback failed");
-                    }
-                }
-            });
-    }
+                internalWrapper.SetUnit(iu);
 
-    public Task<T> CreateUnitAsync<T, TR>(long id, Vector2 position, Func<TR> targetFactory)
-        where T : class, IRegionUnit<TR>, new()
-        where TR : class, IAlive
-    {
-        var target = targetFactory();
-        return CreateUnitAsync<T, TR>(id, position, target);
-    }
+                if (target is ISetRegionUnit<T, TR> su)
+                    su.SetRegionUnit(wrapper);
 
-    public void CreateUnit<T, TR>(long id, Vector2 position, Func<TR> targetFactory, Action<T> callback)
-        where T : class, IRegionUnit<TR>, new()
-        where TR : class, IAlive
-    {
-        var target = targetFactory();
-        CreateUnit<T, TR>(id, position, target, callback);
+                if (target is IRegionUnitOnStart os)
+                    os.OnUnitStart();
+                tcs.SetResult(wrapper);
+            }, data);
+        };
+
+        _units[new UnitKey(id, unitType)] = wrapper;
+        return wrapper;
     }
 
     public T? GetUnit<T, TR>(long id)
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
-        var wrapper = new T();
-        var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
+        var unitType = GetUnitType<T>();
         var key = new UnitKey(id, unitType);
 
         if (_units.TryGetValue(key, out var obj) && obj is T t)
@@ -277,8 +251,7 @@ internal sealed class RegionModule : IRegionModule
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
-        var wrapper = new T();
-        var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
+        var unitType = GetUnitType<T>();
         var key = new UnitKey(id, unitType);
 
         if (_units.TryGetValue(key, out var obj) && obj is T t)
@@ -291,13 +264,24 @@ internal sealed class RegionModule : IRegionModule
         return false;
     }
 
+    private static string GetUnitType<T>()
+        where T : class, new()
+    {
+        var type = typeof(T);
+
+        if (_unitTypeCache.TryGetValue(type, out var unitType))
+            return unitType;
+
+        unitType = ((IRegionUnitInternal)new T()).GetUnitType();
+        _unitTypeCache[type] = unitType;
+        return unitType;
+    }
+
     public IList<T> GetUnits<T, TR>()
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
-        var wrapper = new T();
-        var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
-
+        var unitType = GetUnitType<T>();
         var result = new List<T>();
         foreach (var kvp in _units)
         {
@@ -312,45 +296,28 @@ internal sealed class RegionModule : IRegionModule
         where T : class, IRegionUnit<TR>, new()
         where TR : class, IAlive
     {
-        _unitEventQueue.Enqueue(() =>
-        {
-            var wrapper = new T();
-            var unitType = ((IRegionUnitInternal)wrapper).GetUnitType();
-            var key = new UnitKey(id, unitType);
+        var unitType = GetUnitType<T>();
+        var key = new UnitKey(id, unitType);
 
-            if (!_units.TryGetValue(key, out var obj) || obj is not T t)
-                return;
+        if (!_units.TryGetValue(key, out var obj) || obj is not T t)
+            return;
 
-            var internalWrapper = (IRegionUnitInternal)t;
-            var iu = internalWrapper.GetUnit();
-            var target = iu?.Target as TR;
+        var internalWrapper = (IRegionUnitInternal)t;
+        var iu = internalWrapper.GetUnit();
+        var target = iu?.Target as TR;
 
-            if (target is IRegionUnitOnDestroy od)
-                od.OnUnitDestroy();
+        if (target is IRegionUnitOnDestroy od)
+            od.OnUnitDestroy();
 
-            if (iu != null)
-                iu.Destroy();
+        if (iu != null)
+            iu.Destroy();
 
-            _units.Remove(key);
-        });
+        _units.Remove(key);
     }
 
     public void Tick()
     {
-        while (_unitEventQueue.TryDequeue(out var action))
-        {
-            if (action != null)
-            {
-                try
-                {
-                    action();
-                }
-                catch (Exception ex)
-                {
-                    PubSubLog.Error(ex, "Tick action failed");
-                }
-            }
-        }
+        _natifyAdapter.Tick();
     }
 
     public async ValueTask DisposeAsync()
