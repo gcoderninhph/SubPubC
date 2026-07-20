@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package pubsublib;
+
+option csharp_namespace = "PubSubLib.Messages";
+
+// ===== Inbound (Client -> Router -> NATS -> Server) =====
+// Topic: Region.Cmd
+
+message RegionCommand {
+    oneof cmd {
+        CreateUnitCmd create_unit = 1;
+        DestroyUnitCmd destroy_unit = 2;
+    }
+}
+
+message CreateUnitCmd {
+    int64 unit_id = 1;
+    string unit_type = 2;
+    float pos_x = 3;
+    float pos_y = 4;
+    bytes data = 5;
+}
+
+message DestroyUnitCmd {
+    int64 unit_id = 1;
+    string unit_type = 2;
+}
+
+// ===== Outbound (Server -> NATS -> Router -> Client) =====
+// Topic: Region.Evt
+
+message RegionEvent {
+    oneof evt {
+        CreateUnitEvt create_unit = 1;
+        DestroyUnitEvt destroy_unit = 2;
+    }
+}
+
+message CreateUnitEvt {
+    int64 unit_id = 1;
+    string unit_type = 2;
+    float pos_x = 3;
+    float pos_y = 4;
+    bytes data = 5;
+}
+
+message DestroyUnitEvt {
+    int64 unit_id = 1;
+    string unit_type = 2;
+}
+
+// ===== Commit / Message — carried via PubSub.Evt UnitEventMsg =====
+
+message RegionCommit {
+    string commit = 1;
+    bytes mirror_data = 2;
+}
+
+message RegionMessage {
+    string subject = 1;
+    bytes data = 2;
+}

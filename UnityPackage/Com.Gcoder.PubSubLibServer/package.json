@@ -1,0 +1,10 @@
+{
+  "name": "com.gcoder.pubsublibserver",
+  "version": "2.0.4",
+  "displayName": "PubSubLib Server",
+  "description": "PubSubLib server-side mirror, proto contracts, and code generation for Unity",
+  "unity": "2022.3",
+  "author": {
+    "name": "PubSubLib"
+  }
+}

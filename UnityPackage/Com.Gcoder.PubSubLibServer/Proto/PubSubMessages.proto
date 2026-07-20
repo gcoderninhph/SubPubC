@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package pubsublib;
+
+option csharp_namespace = "PubSubLib.Messages";
+
+// ===== Shared =====
+
+message TypeGroup {
+    string type = 1;
+    repeated int64 unit_ids = 2;
+    repeated int32 versions = 3;
+}
+
+message UnitEnterItem {
+    int64 id = 1;
+    string type = 2;
+    float pos_x = 3;
+    float pos_y = 4;
+    bytes data = 5;
+    int32 version = 6;
+}
+
+// ===== Outbound (Server -> Client) =====
+// Topic: PubSub.Evt
+
+message PubSubEvent {
+    oneof evt {
+        BatchEnterMsg batch_enter = 1;
+        BatchLeaveMsg batch_leave = 2;
+        SyncEnterMsg sync_enter = 3;
+        SyncLeaveMsg sync_leave = 4;
+        UnitEventMsg unit_event = 5;
+    }
+}
+
+message BatchEnterMsg {
+    repeated int64 watcher_ids = 1;
+    int64 unit_id = 2;
+    string unit_type = 3;
+    float pos_x = 4;
+    float pos_y = 5;
+    bytes data = 6;
+    int32 version = 7;
+}
+
+message BatchLeaveMsg {
+    repeated int64 watcher_ids = 1;
+    int64 unit_id = 2;
+    string unit_type = 3;
+}
+
+message SyncEnterMsg {
+    int64 watcher_id = 1;
+    repeated UnitEnterItem units = 2;
+}
+
+message SyncLeaveMsg {
+    int64 watcher_id = 1;
+    repeated TypeGroup keys = 2;
+}
+
+message UnitEventMsg {
+    repeated int64 watcher_ids = 1;
+    int64 unit_id = 2;
+    string unit_type = 3;
+    string event_name = 4;
+    bytes data = 5;
+    bool use_udp = 6;
+}
+
+// ===== Inbound (Client -> Server) =====
+// Topic: PubSub.Cmd
+
+message PubSubCommand {
+    oneof cmd {
+        AddWatcherCmd add_watcher = 1;
+        RemoveWatcherCmd remove_watcher = 2;
+        MoveWatcherCmd move_watcher = 3;
+        PingUnitsCmd ping_units = 4;
+    }
+}
+
+message AddWatcherCmd {
+    int64 watcher_id = 1;
+    float pos_x = 2;
+    float pos_y = 3;
+    float radius = 4;
+}
+
+message RemoveWatcherCmd {
+    int64 watcher_id = 1;
+}
+
+message MoveWatcherCmd {
+    int64 watcher_id = 1;
+    float pos_x = 2;
+    float pos_y = 3;
+    float radius = 4;
+}
+
+message PingUnitsCmd {
+    int64 watcher_id = 1;
+    repeated TypeGroup units = 2;
+}
+
+// ===== PlayerSpeaks =====
+// Topic: PlayerSpeaks.Evt (Server -> Router -> Client via MyConnection)
+
+message PlayerSpeaksEvent {
+    string data_name = 1;
+    int64 player_id = 2;
+    bytes data = 3;
+    string commit = 4;
+}
+
+// Topic: PlayerSpeaks.Msg (Server -> Router -> Client via MyConnection)
+
+message MirrorMessageEvent {
+    string data_name = 1;
+    int64 player_id = 2;
+    string subject = 3;
+    bytes data = 4;
+}
+
+// Topic: PlayerSpeaks.ClientMsg (Client -> Router -> Server via MyConnection TCP + NATS)
+
+message ClientMirrorMessage {
+    string data_name = 1;
+    int64 player_id = 2;
+    string subject = 3;
+    bytes data = 4;
+}
+
+// Topic: PlayerSpeaks.Welcome (Router -> Client via MyConnection TCP)
+
+message PlayerSpeaksWelcomeMsg {
+    int64 player_id = 1;
+}
+
+// Topic: PlayerSpeaks.Status (Router -> Server via Natify)
+
+message PlayerOnlineStatusMsg {
+    int64 player_id = 1;
+    bool is_online = 2;
+}
+
+// Topic: PlayerSpeaks.Ping (Client -> Router -> Server via Natify)
+
+message PlayerPingMsg {
+    int64 player_id = 1;
+}
