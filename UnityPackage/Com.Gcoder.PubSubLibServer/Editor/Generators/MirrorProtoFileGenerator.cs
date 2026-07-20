@@ -29,6 +29,25 @@ namespace PubSubLib.Mirror.Generator
     /// </summary>
     public static class MirrorProtoFileGenerator
     {
+        private static readonly System.Collections.Generic.Dictionary<string, string> CSharpAliases = new()
+        {
+            ["System.Boolean"] = "bool",
+            ["System.Byte"] = "byte",
+            ["System.SByte"] = "sbyte",
+            ["System.Char"] = "char",
+            ["System.Decimal"] = "decimal",
+            ["System.Double"] = "double",
+            ["System.Single"] = "float",
+            ["System.Int32"] = "int",
+            ["System.UInt32"] = "uint",
+            ["System.Int64"] = "long",
+            ["System.UInt64"] = "ulong",
+            ["System.Int16"] = "short",
+            ["System.UInt16"] = "ushort",
+            ["System.String"] = "string",
+            ["System.Object"] = "object",
+        };
+
         /// <returns>true nếu có file được ghi ra; false nếu class không có field nào để mirror (giống early-return của generator gốc)</returns>
         public static bool GenerateFile(Type typeClass, string pathOutPut)
         {
@@ -151,7 +170,8 @@ namespace PubSubLib.Mirror.Generator
             if (t.IsArray)
                 return GetFriendlyTypeName(t.GetElementType()!) + "[]";
 
-            return (t.FullName ?? t.Name).Replace('+', '.');
+            var fullName = t.FullName ?? t.Name;
+            return CSharpAliases.TryGetValue(fullName, out var alias) ? alias : fullName.Replace('+', '.');
         }
 
         // ================= Bước 2: sinh source text (giữ nguyên logic GenerateCode gốc) =================
