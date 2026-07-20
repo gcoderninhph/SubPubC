@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package pubsublib.test;
+
+option csharp_namespace = "PubSubLib.Messages";
+
+// ===== Mirror Struct Test =====
+
+message StructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    int32 version = 3;
+}
+
+// ===== Mirror Vector3 Test =====
+
+message Vector3TestMsg {
+    repeated float position_vector3 = 1;
+    repeated float waypoints_vector3s = 2;
+    int32 version = 3;
+}
+
+// ===== Mirror Vector3 Struct Test =====
+
+message Vector3StructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated float struct_x_player_x_position_vector3s_value = 3;
+    repeated int32 struct_x_player_x_position_vector3s_count = 4;
+    int32 version = 5;
+}
+
+// ===== Mirror Vector3 Single Struct Test =====
+
+message Vector3SingleStructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated float struct_x_player_x_position_vector3 = 3;
+    int32 version = 4;
+}
+
+// ===== Mirror Primitive Array Struct Test =====
+
+message PrimitiveArrayStructTestMsg {
+    repeated int64 struct_x_player_x_id = 1;
+    repeated string struct_x_player_x_name = 2;
+    repeated int64 struct_x_player_x_bean_array_value = 3;
+    repeated int32 struct_x_player_x_bean_array_count = 4;
+    repeated float struct_x_player_x_scores_array_value = 5;
+    repeated int32 struct_x_player_x_scores_array_count = 6;
+    int32 version = 7;
+}
+
+// ===== Mirror Class Test =====
+
+message ClassTestMsg {
+    repeated int64 class_x_player_x_id = 1;
+    repeated string class_x_player_x_name = 2;
+    int32 version = 3;
+    repeated float class_x_player_x_position_vector3s_value = 4;
+    repeated int32 class_x_player_x_position_vector3s_count = 5;
+}
+
+// ===== Mirror SendMessage Test =====
+
+message ChatMsg {
+    string text = 1;
+}
+
+message MirrorSendTestMsg {
+    int32 version = 1;
+}
+
+// ===== UnitData Test =====
+
+message UnitDataMsg {
+    string name = 1;
+    string description = 2;
+    int32 health = 3;
+    int32 level = 4;
+}
