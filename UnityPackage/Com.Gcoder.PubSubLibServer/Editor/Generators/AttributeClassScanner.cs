@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,9 +12,8 @@ namespace PubSubLib.Mirror.Generator
     /// Quét toàn bộ Type đã compile có gắn [MirrorProto] hoặc [UnitMirrorServer],
     /// rồi đưa từng Type cho generator tương ứng để sinh file .g.cs vào Assets/Generated/&lt;TênClass&gt;.g.cs.
     ///
-    /// Dùng UnityEditor.TypeCache thay vì tự quét text file .cs: nó trả về Type thật
-    /// (cần thiết để gọi MirrorProtoFileGenerator/UnitMirrorFileGenerator, vốn nhận System.Type),
-    /// và được Unity cache sẵn nên rất nhanh, không phải tự Reflect toàn bộ AppDomain.
+    /// Dùng AppDomain.CurrentDomain.GetAssemblies() thay vì TypeCache để luôn reflect
+    /// assemblies mới nhất, tránh bị stale namespace/domain-reload.
     ///
     /// LƯU Ý: file này phải nằm trong 1 thư mục tên "Editor" (bất kỳ đâu trong Assets).
     /// </summary>
@@ -32,7 +33,12 @@ namespace PubSubLib.Mirror.Generator
             int errorCount = 0;
  
             // ---- [MirrorProto] -> MirrorProtoFileGenerator ----
-            foreach (var type in TypeCache.GetTypesWithAttribute<MirrorProtoAttribute>())
+            var mirrorTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic)
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
+                .Where(t => t.GetCustomAttribute<MirrorProtoAttribute>() != null);
+
+            foreach (var type in mirrorTypes)
             {
                 var outPath = Path.Combine(outputFolder, $"{type.Name}.g.cs");
                 try
@@ -57,7 +63,12 @@ namespace PubSubLib.Mirror.Generator
             }
  
             // ---- [UnitMirrorServer] -> UnitMirrorFileGenerator ----
-            foreach (var type in TypeCache.GetTypesWithAttribute<UnitMirrorServerAttribute>())
+            var unitTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => !a.IsDynamic)
+                .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
+                .Where(t => t.GetCustomAttribute<UnitMirrorServerAttribute>() != null);
+
+            foreach (var type in unitTypes)
             {
                 var outPath = Path.Combine(outputFolder, $"{type.Name}.g.cs");
                 try
