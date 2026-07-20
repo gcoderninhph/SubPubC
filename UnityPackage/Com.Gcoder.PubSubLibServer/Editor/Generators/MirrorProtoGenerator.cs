@@ -87,14 +87,14 @@ namespace PubSubLib.Mirror.Generator
                 {
                     if (vecUsedIndices.Contains(vi)) continue;
                     var vfn = fieldPropNames[vi];
-                    if (!vfn.EndsWith("Vector3SValue") || vfn.Length <= 13) continue;
+                    if (!vfn.EndsWith("Vector3sValue") || vfn.Length <= 13) continue;
                     if (elementTypes[vi] != "float") continue;
                     var prefix = vfn.Substring(0, vfn.Length - 13);
                     for (int ci = 0; ci < members.Count; ci++)
                     {
                         if (ci == vi || vecUsedIndices.Contains(ci)) continue;
                         var cfn = fieldPropNames[ci];
-                        if (!cfn.EndsWith("Vector3SCount") || cfn.Length <= 13) continue;
+                        if (!cfn.EndsWith("Vector3sCount") || cfn.Length <= 13) continue;
                         if (elementTypes[ci] != "int") continue;
                         if (cfn.Substring(0, cfn.Length - 13) == prefix)
                         {
@@ -111,7 +111,7 @@ namespace PubSubLib.Mirror.Generator
                     if (vecUsedIndices.Contains(si)) continue;
                     var sfn = fieldPropNames[si];
                     if (!sfn.EndsWith("Vector3") || sfn.Length <= 7) continue;
-                    if (sfn.EndsWith("Vector3SValue") || sfn.EndsWith("Vector3SCount")) continue;
+                    if (sfn.EndsWith("Vector3sValue") || sfn.EndsWith("Vector3sCount")) continue;
                     if (elementTypes[si] != "float") continue;
                     var prefix = sfn.Substring(0, sfn.Length - 7);
                     vec3Fields.Add(new StructVector3Field(prefix, protoPropNames[si], "", isArray: false));
@@ -178,7 +178,7 @@ namespace PubSubLib.Mirror.Generator
                 if (f.ElementTypeName != "float") continue;
                 if (f.StructGroupIndex >= 0) continue;
 
-                if (f.PropertyName.EndsWith("Vector3S") && f.PropertyName.Length > 8)
+                if (f.PropertyName.EndsWith("Vector3s") && f.PropertyName.Length > 8)
                 {
                     var propName = f.PropertyName.Substring(0, f.PropertyName.Length - 8);
                     var fieldName = ToFieldName(propName);
