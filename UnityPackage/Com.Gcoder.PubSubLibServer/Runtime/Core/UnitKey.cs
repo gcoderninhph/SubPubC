@@ -1,43 +1,39 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+
 namespace PubSubLib
 {
-
-public readonly struct UnitKey : IEquatable<UnitKey>
-{
-    public readonly long Id;
-    public readonly string Type;
-
-    public UnitKey(long id, string type)
+    public readonly struct UnitKey : IEquatable<UnitKey>
     {
-        Id = id;
-        Type = type;
-    }
+        public readonly long Id;
+        public readonly string Type;
 
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Id, Type);
-    }
+        public UnitKey(long id, string type)
+        {
+            Id = id;
+            Type = type;
+        }
 
-    public override bool Equals(object? obj)
-    {
-        return obj is UnitKey other && Equals(other);
-    }
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Id, Type);
+        }
 
-    public bool Equals(UnitKey other)
-    {
-        return Id == other.Id && Type == other.Type;
-    }
+        public override bool Equals(object? obj)
+        {
+            return obj is UnitKey other && Equals(other);
+        }
 
-    public static bool operator ==(UnitKey left, UnitKey right) => left.Equals(right);
-    public static bool operator !=(UnitKey left, UnitKey right) => !left.Equals(right);
+        public bool Equals(UnitKey other)
+        {
+            return Id == other.Id && Type == other.Type;
+        }
 
-    public override string ToString()
-    {
-        return $"{Type}:{Id}";
+        public static bool operator ==(UnitKey left, UnitKey right) => left.Equals(right);
+        public static bool operator !=(UnitKey left, UnitKey right) => !left.Equals(right);
+
+        public override string ToString()
+        {
+            return $"{Type}:{Id}";
+        }
     }
-}
 }

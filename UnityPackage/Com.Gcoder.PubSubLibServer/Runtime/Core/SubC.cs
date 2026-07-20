@@ -1,44 +1,40 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+
 namespace PubSubLib
 {
-
-internal static class SubC
-{
-    public static string[] GetAllGridCellsInRange(Vector2 position, float range, float gridSize)
+    internal static class SubC
     {
-        var cells = ListPool<string>.Rent();
-        try
+        public static string[] GetAllGridCellsInRange(Vector2 position, float range, float gridSize)
         {
-            int minX = (int)Math.Floor((position.x - range) / gridSize);
-            int maxX = (int)Math.Floor((position.x + range) / gridSize);
-            int minY = (int)Math.Floor((position.y - range) / gridSize);
-            int maxY = (int)Math.Floor((position.y + range) / gridSize);
-
-            for (int x = minX; x <= maxX; x++)
+            var cells = ListPool<string>.Rent();
+            try
             {
-                for (int y = minY; y <= maxY; y++)
+                int minX = (int)Math.Floor((position.x - range) / gridSize);
+                int maxX = (int)Math.Floor((position.x + range) / gridSize);
+                int minY = (int)Math.Floor((position.y - range) / gridSize);
+                int maxY = (int)Math.Floor((position.y + range) / gridSize);
+
+                for (int x = minX; x <= maxX; x++)
                 {
-                    cells.Add($"{x}:{y}");
+                    for (int y = minY; y <= maxY; y++)
+                    {
+                        cells.Add($"{x}:{y}");
+                    }
                 }
+
+                return cells.ToArray();
             }
-
-            return cells.ToArray();
+            finally
+            {
+                ListPool<string>.Return(cells);
+            }
         }
-        finally
+
+        public static string GetGridCellByPosition(Vector2 position, float gridSize)
         {
-            ListPool<string>.Return(cells);
+            int cellX = (int)Math.Floor(position.x / gridSize);
+            int cellY = (int)Math.Floor(position.y / gridSize);
+            return $"{cellX}:{cellY}";
         }
     }
-
-    public static string GetGridCellByPosition(Vector2 position, float gridSize)
-    {
-        int cellX = (int)Math.Floor(position.x / gridSize);
-        int cellY = (int)Math.Floor(position.y / gridSize);
-        return $"{cellX}:{cellY}";
-    }
-}
 }

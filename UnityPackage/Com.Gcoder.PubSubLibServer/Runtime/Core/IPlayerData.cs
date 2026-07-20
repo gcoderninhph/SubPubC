@@ -1,21 +1,17 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System;
+
 namespace PubSubLib
 {
+    public interface IPlayerData
+    {
+        long PlayerId { get; }
+        bool IsOnLine { get; }
 
-public interface IPlayerData
-{
-    long PlayerId { get; }
-    bool IsOnLine { get; }
+        string DataName { get; }
 
-    string DataName { get; }
-
-    void OnChange(Action<byte[], string> handler);
-    void OnMessage(Action<string, byte[]> handler);
-    void Commit(string commit);
-    void DoneInit();
-}
+        void OnChange(Action<byte[], string> handler);
+        void OnMessage(Action<string, byte[]> handler);
+        void Commit(string commit);
+        void DoneInit();
+    }
 }

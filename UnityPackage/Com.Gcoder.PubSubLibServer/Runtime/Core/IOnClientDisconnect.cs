@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-namespace PubSubLib
+﻿namespace PubSubLib
 {
-
-public interface IOnClientDisconnect
-{
-    void OnClientDisconnect();
-}
+    public interface IOnClientDisconnect
+    {
+        void OnClientDisconnect();
+    }
 }

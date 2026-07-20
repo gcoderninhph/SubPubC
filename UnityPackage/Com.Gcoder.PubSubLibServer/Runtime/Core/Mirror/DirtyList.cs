@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -25,7 +24,9 @@ namespace PubSubLib.Mirror
             }
         }
 
-        public DirtyList() { }
+        public DirtyList()
+        {
+        }
 
         public DirtyList(IEnumerable<T> items, System.Action? onDirty)
         {
@@ -58,6 +59,7 @@ namespace PubSubLib.Mirror
                 _onDirty?.Invoke();
                 return true;
             }
+
             return false;
         }
 
