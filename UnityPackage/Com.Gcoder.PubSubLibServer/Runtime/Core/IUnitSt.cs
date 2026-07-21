@@ -1,4 +1,7 @@
 ﻿using Google.Protobuf;
+using UnityEngine;
+
+#nullable enable
 
 namespace PubSubLib
 {

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using UnityEngine;
 
+#nullable enable
 namespace PubSubLib
 {
     public interface IPubSub : IDisposable

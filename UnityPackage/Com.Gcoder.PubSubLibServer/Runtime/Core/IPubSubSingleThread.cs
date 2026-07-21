@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Google.Protobuf;
+using UnityEngine;
+
+#nullable enable
 
 namespace PubSubLib
 {

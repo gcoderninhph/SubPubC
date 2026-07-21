@@ -229,13 +229,13 @@ namespace PubSubLib.Mirror.Generator
                         {
                             var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                             sb.AppendLine(
-                                $"        private global::PubSubLib.Mirror.DirtyList<global::PubSubLib.Vector3> {bf};");
+                                $"        private global::PubSubLib.Mirror.DirtyList<global::UnityEngine.Vector3> {bf};");
                             sb.AppendLine(
-                                $"        public global::PubSubLib.Mirror.DirtyList<global::PubSubLib.Vector3> {vf.FieldName} => {bf};");
+                                $"        public global::PubSubLib.Mirror.DirtyList<global::UnityEngine.Vector3> {vf.FieldName} => {bf};");
                         }
                         else
                         {
-                            sb.AppendLine($"        public global::PubSubLib.Vector3 {vf.FieldName} {{ get; }}");
+                            sb.AppendLine($"        public global::UnityEngine.Vector3 {vf.FieldName} {{ get; }}");
                         }
                     }
 
@@ -259,8 +259,8 @@ namespace PubSubLib.Mirror.Generator
                     {
                         var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                         var v3Type = vf.IsArray
-                            ? "System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3>"
-                            : "global::PubSubLib.Vector3";
+                            ? "System.Collections.Generic.IReadOnlyList<global::UnityEngine.Vector3>"
+                            : "global::UnityEngine.Vector3";
                         ctorArgs.Add($"{v3Type} {argName}");
                     }
 
@@ -287,7 +287,7 @@ namespace PubSubLib.Mirror.Generator
                         {
                             var bf = "_" + char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                             sb.AppendLine(
-                                $"            {bf} = new global::PubSubLib.Mirror.DirtyList<global::PubSubLib.Vector3>({argName}, () => __markDirty?.Invoke());");
+                                $"            {bf} = new global::PubSubLib.Mirror.DirtyList<global::UnityEngine.Vector3>({argName}, () => __markDirty?.Invoke());");
                         }
                         else
                         {
@@ -324,11 +324,11 @@ namespace PubSubLib.Mirror.Generator
                         if (vf.IsArray)
                         {
                             sb.AppendLine(
-                                $"        public global::PubSubLib.Mirror.DirtyList<global::PubSubLib.Vector3> {vf.FieldName};");
+                                $"        public global::PubSubLib.Mirror.DirtyList<global::UnityEngine.Vector3> {vf.FieldName};");
                         }
                         else
                         {
-                            sb.AppendLine($"        public global::PubSubLib.Vector3 {vf.FieldName} {{ get; }}");
+                            sb.AppendLine($"        public global::UnityEngine.Vector3 {vf.FieldName} {{ get; }}");
                         }
                     }
 
@@ -369,8 +369,8 @@ namespace PubSubLib.Mirror.Generator
                     {
                         var argName = char.ToLowerInvariant(vf.FieldName[0]) + vf.FieldName.Substring(1);
                         var v3Type = vf.IsArray
-                            ? "System.Collections.Generic.IReadOnlyList<global::PubSubLib.Vector3>"
-                            : "global::PubSubLib.Vector3";
+                            ? "System.Collections.Generic.IReadOnlyList<global::UnityEngine.Vector3>"
+                            : "global::UnityEngine.Vector3";
                         ctorArgs.Add($"{v3Type} {argName}");
                     }
 
@@ -395,7 +395,7 @@ namespace PubSubLib.Mirror.Generator
                         if (vf.IsArray)
                         {
                             sb.AppendLine(
-                                $"            {vf.FieldName} = new global::PubSubLib.Mirror.DirtyList<global::PubSubLib.Vector3>({argName}, null);");
+                                $"            {vf.FieldName} = new global::PubSubLib.Mirror.DirtyList<global::UnityEngine.Vector3>({argName}, null);");
                         }
                         else
                         {
@@ -547,7 +547,7 @@ namespace PubSubLib.Mirror.Generator
             {
                 if (vg.IsList)
                 {
-                    var listType = "global::PubSubLib.Mirror.MirrorRepeatedList<global::PubSubLib.Vector3>";
+                    var listType = "global::PubSubLib.Mirror.MirrorRepeatedList<global::UnityEngine.Vector3>";
                     sb.AppendLine($"    private readonly {listType} {vg.FieldName} = new();");
                     sb.AppendLine();
                     sb.AppendLine($"    public {listType} {vg.PropertyName}");
@@ -557,9 +557,9 @@ namespace PubSubLib.Mirror.Generator
                 }
                 else
                 {
-                    sb.AppendLine($"    private global::PubSubLib.Vector3 {vg.FieldName};");
+                    sb.AppendLine($"    private global::UnityEngine.Vector3 {vg.FieldName};");
                     sb.AppendLine();
-                    sb.AppendLine($"    public global::PubSubLib.Vector3 {vg.PropertyName}");
+                    sb.AppendLine($"    public global::UnityEngine.Vector3 {vg.PropertyName}");
                     sb.AppendLine("    {");
                     sb.AppendLine($"        get => {vg.FieldName};");
                     sb.AppendLine($"        set => {vg.FieldName} = value;");
@@ -587,7 +587,7 @@ namespace PubSubLib.Mirror.Generator
                     if (vg.IsList)
                     {
                         sb.AppendLine(
-                            $"        global::PubSubLib.Vector3[]? ___arr_{vg.FieldName} = {vg.FieldName}.TrySnapshot();");
+                            $"        global::UnityEngine.Vector3[]? ___arr_{vg.FieldName} = {vg.FieldName}.TrySnapshot();");
                     }
                 }
 

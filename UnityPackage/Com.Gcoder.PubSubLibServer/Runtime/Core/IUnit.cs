@@ -1,3 +1,7 @@
+using UnityEngine;
+
+#nullable enable
+
 namespace PubSubLib
 {
     public interface IUnit

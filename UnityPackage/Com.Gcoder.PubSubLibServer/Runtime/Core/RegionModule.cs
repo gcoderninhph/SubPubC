@@ -6,6 +6,7 @@ using Natify;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
 using PubSubLib.Mirror;
+using UnityEngine;
 
 namespace PubSubLib
 {

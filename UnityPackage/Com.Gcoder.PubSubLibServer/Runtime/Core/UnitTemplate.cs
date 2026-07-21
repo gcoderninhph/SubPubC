@@ -1,4 +1,7 @@
 ﻿using System;
+using UnityEngine;
+
+#nullable enable
 
 namespace PubSubLib
 {
@@ -6,12 +9,12 @@ namespace PubSubLib
     {
         public event Action<byte[]>? Init;
         private bool _isCommited;
-        public long Id { get; }
-        public string Type { get; }
+        public long Id { get; } = 0;
+        public string Type { get; } = string.Empty;
         public Vector2 Position { get; set; }
-        public bool IsAlive { get; }
-        public object? Target { get; }
-        public int Version { get; }
+        public bool IsAlive { get; } = false;
+        public object? Target { get; } = null;
+        public int Version { get; } = 0;
 
         public byte[]? Data
         {
