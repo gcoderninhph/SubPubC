@@ -462,10 +462,12 @@ namespace PubSubLib.Mirror.Generator
             sb.AppendLine("        {");
             sb.AppendLine("            _initialized = true;");
             sb.AppendLine("            if (this is IOnStart os) os.OnStart();");
+            sb.AppendLine("            if (this.GetTarget() is IOnStart os2) os2.OnStart();");
             sb.AppendLine("        }");
             sb.AppendLine("        else");
             sb.AppendLine("        {");
             sb.AppendLine("            if (this is IOnCommit co) co.OnCommit(commit);");
+            sb.AppendLine("            if (this.GetTarget() is IOnCommit co2) co2.OnCommit(commit);");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine();

@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using MyConnection;
-using PubSubLib;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
+
+#nullable enable
 
 namespace PubSubLib.Client
 {
@@ -15,7 +16,6 @@ namespace PubSubLib.Client
         private ISubscribe? _udpSubPubSub;
 
         private readonly Dictionary<(long Id, string Type), object> _units = new();
-        private readonly Dictionary<(long Id, string Type), IAlive> _targets = new();
         private readonly Dictionary<string, RegionUnitFactory> _factories = new();
 
         private long _watcherId;
@@ -62,20 +62,19 @@ namespace PubSubLib.Client
 
             internalWrapper.Init(evt.UnitId,
                 new Vector2 { x = evt.PosX, y = evt.PosY });
-            
+
             if (evt.Data != null && evt.Data.Length > 0)
                 internalWrapper.ApplyUpdate(evt.Data.ToByteArray(), "Create");
-            
+
             var target = factory.CreateTarget(wrapper);
             internalWrapper.SetTarget(target);
 
-            if (target is not IAlive aliveTarget || !aliveTarget.IsAlive)
+            if (!IsAlive(target))
                 return;
 
             factory.OnSetup(wrapper, target);
 
             _units[key] = wrapper;
-            _targets[key] = aliveTarget;
         }
 
         private void DestroyUnitInternal((long Id, string Type) key)
@@ -83,11 +82,18 @@ namespace PubSubLib.Client
             if (!_units.TryGetValue(key, out _))
                 return;
 
-            if (_targets.TryGetValue(key, out var target) && target is IRegionOnDestroy od)
-                od.OnDestroyUnit();
+            if (_units.TryGetValue(key, out var warrap))
+            {
+                if (warrap is IRegionUnit oa && oa.GetTarget() is IOnDestroy oa2)
+                {
+                    bool objectDestroyed = !IsAlive(oa.GetTarget());
+                    if (warrap is IOnDestroy od) od.OnDestroyUnit(objectDestroyed);
+                    oa2.OnDestroyUnit(objectDestroyed);
+                }
+            }
+
 
             _units.Remove(key);
-            _targets.Remove(key);
         }
 
         private void OnPubSubEvent(PubSubEvent evt)
@@ -197,8 +203,16 @@ namespace PubSubLib.Client
                         var commit = RegionCommit.Parser.ParseFrom(msg.Data);
                         internalWrapper.ApplyUpdate(commit.MirrorData.ToByteArray(), commit.Commit);
 
-                        if (_targets.TryGetValue(key, out var t) && t is IRegionOnCommit oc)
-                            oc.OnCommitUnit(commit.Commit);
+                        if (_units.TryGetValue(key, out var unit))
+                        {
+                            if (unit is IOnCommit od) od.OnCommit(commit.Commit);
+                            if (unit is IRegionUnit oa &&
+                                IsAlive(oa.GetTarget()) &&
+                                oa.GetTarget() is IOnCommit oa2)
+                            {
+                                oa2.OnCommit(commit.Commit);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -223,7 +237,7 @@ namespace PubSubLib.Client
 
         public void OnCreateUnit<T, TR>(Func<T, TR> unit)
             where T : class, IRegionUnit<TR>, new()
-            where TR : class, IAlive
+            where TR : UnityEngine.Object
         {
             var temp = Activator.CreateInstance<T>();
             var unitType = temp.UnitType;
@@ -266,8 +280,8 @@ namespace PubSubLib.Client
                     {
                         if (t is ISetRegionUnit<T, TR> su)
                             su.SetRegionUnit((T)w);
-                        if (t is IRegionOnStart os)
-                            os.OnStartUnit();
+                        if (t is IOnStart os)
+                            os.OnStart();
                     }
                     catch (Exception ex)
                     {
@@ -279,7 +293,7 @@ namespace PubSubLib.Client
 
         public T? GetUnit<T, TR>(long id)
             where T : class, IRegionUnit<TR>, new()
-            where TR : class, IAlive
+            where TR : UnityEngine.Object
         {
             var temp = Activator.CreateInstance<T>();
             var unitType = temp.UnitType;
@@ -293,7 +307,7 @@ namespace PubSubLib.Client
 
         public bool TryGetUnit<T, TR>(long id, out T unit)
             where T : class, IRegionUnit<TR>, new()
-            where TR : class, IAlive
+            where TR : UnityEngine.Object
         {
             var temp = Activator.CreateInstance<T>();
             var unitType = temp.UnitType;
@@ -311,7 +325,7 @@ namespace PubSubLib.Client
 
         public IList<T> GetUnits<T, TR>()
             where T : class, IRegionUnit<TR>, new()
-            where TR : class, IAlive
+            where TR : UnityEngine.Object
         {
             var temp = Activator.CreateInstance<T>();
             var unitType = temp.UnitType;
@@ -328,7 +342,7 @@ namespace PubSubLib.Client
 
         public void Destroy<T, TR>(T unit)
             where T : class, IRegionUnit<TR>
-            where TR : class, IAlive
+            where TR : UnityEngine.Object
         {
             var key = (unit.Id, unit.UnitType);
             DestroyUnitInternal(key);
@@ -404,18 +418,27 @@ namespace PubSubLib.Client
         private void CleanDeadUnits()
         {
             var deadKeys = new List<(long, string)>();
-            foreach (var (key, target) in _targets)
+            foreach (var (key, wrapper) in _units)
             {
-                if (!target.IsAlive)
+                if (wrapper is IRegionUnit oa && !IsAlive(oa.GetTarget()))
+                {
                     deadKeys.Add(key);
+                }
             }
 
             foreach (var key in deadKeys)
             {
-                if (_targets.TryGetValue(key, out var target) && target is IRegionOnDestroy od)
-                    od.OnDestroyUnit();
+                if (_units.TryGetValue(key, out var wrapper))
+                {
+                    if (wrapper is IRegionUnit oa && oa.GetTarget() is IOnDestroy oa2)
+                    {
+                        bool objectDestroyed = !IsAlive(oa.GetTarget());
+                        if (wrapper is IOnDestroy od) od.OnDestroyUnit(objectDestroyed);
+                        oa2.OnDestroyUnit(objectDestroyed);
+                    }
+                }
+
                 _units.Remove(key);
-                _targets.Remove(key);
             }
         }
 
@@ -427,29 +450,46 @@ namespace PubSubLib.Client
             _tcpSubPubSub?.UnSubscribe();
             _udpSubPubSub?.UnSubscribe();
 
-            foreach (var target in _targets.Values)
-                if (target is IRegionOnDestroy od)
-                    od.OnDestroyUnit();
 
             foreach (var wrapper in _units.Values)
+            {
                 if (wrapper is IRegionClientUnitInternal iu)
                     iu.DisposeMessageSubs();
 
+                if (wrapper is IRegionUnit oa && oa.GetTarget() is IOnDestroy oa2)
+                {
+                    bool objectDestroyed = !IsAlive(oa.GetTarget());
+                    if (wrapper is IOnDestroy od) od.OnDestroyUnit(objectDestroyed);
+                    oa2.OnDestroyUnit(objectDestroyed);
+                }
+            }
+
             _units.Clear();
-            _targets.Clear();
             _factories.Clear();
             _client = null;
+        }
+
+        public static bool IsAlive(UnityEngine.Object gameObject)
+        {
+            try
+            {
+                return gameObject != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private sealed class RegionUnitFactory
         {
             private readonly Func<object> _createWrapper;
-            private readonly Func<object, object> _createTarget;
+            private readonly Func<object, UnityEngine.Object> _createTarget;
             private readonly Action<object, object> _onSetup;
 
             public RegionUnitFactory(
                 Func<object> createWrapper,
-                Func<object, object> createTarget,
+                Func<object, UnityEngine.Object> createTarget,
                 Action<object, object> onSetup)
             {
                 _createWrapper = createWrapper;
@@ -459,7 +499,7 @@ namespace PubSubLib.Client
 
             public object CreateWrapper() => _createWrapper();
 
-            public object CreateTarget(object wrapper) => _createTarget(wrapper);
+            public UnityEngine.Object CreateTarget(object wrapper) => _createTarget(wrapper);
 
             public void OnSetup(object wrapper, object target) => _onSetup(wrapper, target);
         }

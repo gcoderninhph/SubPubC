@@ -153,6 +153,7 @@ namespace PubSubLib.Mirror.Generator
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using Google.Protobuf;");
+            sb.AppendLine("using PubSubLib.Client;");
             sb.AppendLine("using PubSubLib.Contracts;");
             sb.AppendLine("#nullable enable");
             sb.AppendLine("#pragma warning disable CS8618");
@@ -260,8 +261,8 @@ namespace PubSubLib.Mirror.Generator
             sb.AppendLine("        return _mirrorProto;");
             sb.AppendLine("    }");
             sb.AppendLine();
-            sb.AppendLine("    partial void OnCommit(string commit);");
-            sb.AppendLine("    partial void OnStart();");
+            // sb.AppendLine("    partial void OnCommit(string commit);");
+            // sb.AppendLine("    partial void OnStart();");
             sb.AppendLine();
             sb.AppendLine("    public global::MyConnection.ISubscribe OnMessage<T>(string subject, Action<T> callback)");
             sb.AppendLine("        where T : class, global::Google.Protobuf.IMessage<T>, new()");
@@ -484,9 +485,12 @@ namespace PubSubLib.Mirror.Generator
             sb.AppendLine("        if (!_initialized)");
             sb.AppendLine("        {");
             sb.AppendLine("            _initialized = true;");
-            sb.AppendLine("            OnStart();");
+            sb.AppendLine("            if (this is IOnStart os) os.OnStart();");
             sb.AppendLine("        }");
-            sb.AppendLine("        OnCommit(commit);");
+            sb.AppendLine("        else");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (this is IOnCommit co) co.OnCommit(commit);");
+            sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine("    private sealed class __MessageSubscription : global::MyConnection.ISubscribe");

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
-using Google.Protobuf;
 using PubSubLib.Contracts;
-using PubSubLib.Messages;
 using PubSubLib.Mirror;
+
+#nullable enable
 
 namespace PubSubLib.Client
 {
@@ -17,15 +17,15 @@ namespace PubSubLib.Client
         private long _playerId;
         private readonly ConcurrentDictionary<Type, IPlayerMirrorClient> _data = new();
         private readonly ConcurrentDictionary<string, IPlayerMirrorClient> _dataByName = new();
+        
         private readonly ConcurrentDictionary<string, Action> _initActions = new();
-    
         private CancellationTokenSource? _actionCts;
         private Task? _actionTask;
         private readonly object _actionLock = new();
     
         internal long PlayerId => _playerId;
     
-        internal Action<string, long, string, byte[]>? OnSendToServer;
+        internal Action<string, long, string, byte[]>? onSendToServer;
     
         internal void SetPlayerId(long playerId)
         {
@@ -39,12 +39,12 @@ namespace PubSubLib.Client
             var data = new T { PlayerId = _playerId };
             _data[typeof(T)] = data;
             _dataByName[data.DataName] = data;
-            data.OnSendMessage((subject, playerId, bytes) => OnSendToServer?.Invoke(data.DataName, playerId, subject, bytes));
+            data.OnSendMessage((subject, playerId, bytes) => onSendToServer?.Invoke(data.DataName, playerId, subject, bytes));
     
             if (!data.IsInitialized)
             {
                 AddInitAction(data.DataName, () =>
-                    OnSendToServer?.Invoke(data.DataName, _playerId, InitSubject, EmptyBytes));
+                    onSendToServer?.Invoke(data.DataName, _playerId, InitSubject, EmptyBytes));
             }
         }
     
@@ -123,7 +123,11 @@ namespace PubSubLib.Client
     
             if (task != null)
             {
-                try { task.Wait(TimeSpan.FromSeconds(2)); } catch { }
+                try { task.Wait(TimeSpan.FromSeconds(2)); }
+                catch
+                {
+                    // ignored
+                }
             }
     
             lock (_actionLock)
@@ -157,7 +161,7 @@ namespace PubSubLib.Client
         public void Dispose()
         {
             StopActionLoop();
-            OnSendToServer = null;
+            onSendToServer = null;
             _data.Clear();
             _dataByName.Clear();
         }

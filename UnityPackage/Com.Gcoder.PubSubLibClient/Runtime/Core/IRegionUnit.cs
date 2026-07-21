@@ -4,13 +4,18 @@ using MyConnection;
 
 namespace PubSubLib.Client
 {
-    public interface IRegionUnit<TR> where TR : class, IAlive
+    public interface IRegionUnit
     {
         long Id { get; }
         string UnitType { get; }
-        TR GetTarget();
-        ISubscribe OnMessage<TProto>(string subject, Action<TProto> callback) where TProto : class, IMessage<TProto>, new();
+        UnityEngine.Object GetTarget();
+        ISubscribe OnMessage<TProto>(string subject, Action<TProto> callback)
+            where TProto : class, IMessage<TProto>, new();
+    }
+
+    public interface IRegionUnit<TR> : IRegionUnit where TR : UnityEngine.Object
+    {
+        new TR GetTarget();
+        UnityEngine.Object IRegionUnit.GetTarget() => GetTarget();
     }
 }
-
-

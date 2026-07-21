@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using MyConnection;
 
+#nullable enable
+
 namespace PubSubLib.Client
 {
     public interface IRegionClientModule : IClientModule, IDisposable
@@ -10,16 +12,19 @@ namespace PubSubLib.Client
         {
             return new RegionClientModule(config);
         }
-    
-        T? GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-        bool TryGetUnit<T, TR>(long id, out T unit) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-        IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-    
-        void OnCreateUnit<T, TR>(Func<T, TR> unit) where T : class, IRegionUnit<TR>, new() where TR : class, IAlive;
-        void Destroy<T, TR>(T unit) where T : class, IRegionUnit<TR> where TR : class, IAlive;
+
+        T? GetUnit<T, TR>(long id) where T : class, IRegionUnit<TR>, new() where TR : UnityEngine.Object;
+
+        bool TryGetUnit<T, TR>(long id, out T unit) where T : class, IRegionUnit<TR>, new()
+            where TR : UnityEngine.Object;
+
+        IList<T> GetUnits<T, TR>() where T : class, IRegionUnit<TR>, new() where TR : UnityEngine.Object;
+
+        void OnCreateUnit<T, TR>(Func<T, TR> unit)
+            where T : class, IRegionUnit<TR>, new() where TR : UnityEngine.Object;
+
+        void Destroy<T, TR>(T unit) where T : class, IRegionUnit<TR> where TR : UnityEngine.Object;
         void Tick();
         void MoveWatcher(Vector2 position, float range);
     }
-
 }
-

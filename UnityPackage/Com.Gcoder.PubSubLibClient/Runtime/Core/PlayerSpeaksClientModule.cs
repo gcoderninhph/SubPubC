@@ -4,6 +4,8 @@ using MyConnection;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
 
+#nullable enable
+
 namespace PubSubLib.Client
 {
     internal sealed class PlayerSpeaksClientModule : IPlayerSpeaksClientModule
@@ -16,12 +18,12 @@ namespace PubSubLib.Client
         private ISubscribe? _welcomeSub;
         private long _lastPingTicks;
         private bool _playerIdSet;
-    
+
         public PlayerSpeaksClientModule(int pingIntervalMs)
         {
             _pingIntervalMs = pingIntervalMs;
             _client = new PlayerSpeaksClient();
-            _client.OnSendToServer = (dataName, playerId, subject, bytes) =>
+            _client.onSendToServer = (dataName, playerId, subject, bytes) =>
             {
                 _clientPtr?.SendOnTcp("PlayerSpeaks.ClientMsg", new ClientMirrorMessage
                 {
@@ -32,7 +34,7 @@ namespace PubSubLib.Client
                 });
             };
         }
-    
+
         public void SetIClient(IClient client)
         {
             _clientPtr = client;
@@ -40,7 +42,7 @@ namespace PubSubLib.Client
             _tcpSub = client.SubscribeTcp<PlayerSpeaksEvent>("PlayerSpeaks.Evt", OnEvent);
             _msgSub = client.SubscribeTcp<MirrorMessageEvent>("PlayerSpeaks.Msg", OnMsg);
         }
-    
+
         private void OnWelcome(PlayerSpeaksWelcomeMsg msg)
         {
             try
@@ -48,37 +50,52 @@ namespace PubSubLib.Client
                 _client.SetPlayerId(msg.PlayerId);
                 _playerIdSet = true;
             }
-            catch (Exception ex) { PubSubLog.Error(ex, "OnWelcome failed"); }
+            catch (Exception ex)
+            {
+                PubSubLog.Error(ex, "OnWelcome failed");
+            }
         }
-    
+
         private void OnEvent(PlayerSpeaksEvent evt)
         {
-            try { _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit); }
-            catch (Exception ex) { PubSubLog.Error(ex, "OnEvent failed"); }
+            try
+            {
+                _client.ApplyUpdate(evt.DataName, evt.Data.ToByteArray(), evt.Commit);
+            }
+            catch (Exception ex)
+            {
+                PubSubLog.Error(ex, "OnEvent failed");
+            }
         }
-    
+
         private void OnMsg(MirrorMessageEvent msg)
         {
-            try { _client.DispatchMessage(msg.DataName, msg.Subject, msg.Data.ToByteArray()); }
-            catch (Exception ex) { PubSubLog.Error(ex, "OnMsg failed"); }
+            try
+            {
+                _client.DispatchMessage(msg.DataName, msg.Subject, msg.Data.ToByteArray());
+            }
+            catch (Exception ex)
+            {
+                PubSubLog.Error(ex, "OnMsg failed");
+            }
         }
-    
+
         public IPlayerSpeaksClient Get()
         {
             return _client;
         }
-    
+
         public void Tick()
         {
             if (!_playerIdSet || _clientPtr == null) return;
-    
+
             var now = DateTime.UtcNow.Ticks;
             if (now - _lastPingTicks < _pingIntervalMs * TimeSpan.TicksPerMillisecond) return;
-    
+
             _lastPingTicks = now;
             _clientPtr.SendOnTcp("PlayerSpeaks.Ping", new PlayerPingMsg { PlayerId = _client.PlayerId });
         }
-    
+
         public void Dispose()
         {
             _welcomeSub?.UnSubscribe();
@@ -87,6 +104,4 @@ namespace PubSubLib.Client
             _client.Dispose();
         }
     }
-
 }
-
