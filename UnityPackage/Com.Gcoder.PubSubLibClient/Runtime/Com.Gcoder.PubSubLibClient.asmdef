@@ -1,7 +1,9 @@
 {
   "name": "Com.Gcoder.PubSubLibClient",
   "rootNamespace": "",
-  "references": [],
+  "references": [
+    "MyConnection"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

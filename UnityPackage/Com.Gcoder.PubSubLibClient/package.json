@@ -5,6 +5,9 @@
   "description": "PubSubLib client-side mirror, contracts, and code generation for Unity",
   "unity": "2022.3",
   "author": {
-    "name": "PubSubLib"
+    "name": "Gcoder"
+  },
+  "dependencies": {
+    "com.gcoder.myconnection": "0.1.0"
   }
 }

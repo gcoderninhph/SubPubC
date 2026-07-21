@@ -263,7 +263,7 @@ namespace PubSubLib
                 }
                 catch (Exception ex)
                 {
-                    PubSubLog.Error(ex, "EventChannel WaitToReadAsync failed");
+                    //
                 }
 
                 while (_reader.TryRead(out var action))

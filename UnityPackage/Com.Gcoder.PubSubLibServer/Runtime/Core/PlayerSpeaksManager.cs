@@ -8,6 +8,8 @@ using Natify;
 using PubSubLib.Contracts;
 using PubSubLib.Messages;
 
+#nullable enable
+
 namespace PubSubLib
 {
     internal sealed class PlayerSpeaksManager : IPlayerSpeaksManager
@@ -196,34 +198,30 @@ namespace PubSubLib
             }
         }
 
-        private Task OnPing(Data<PlayerPingMsg> args)
+        private void OnPing(Data<PlayerPingMsg> args)
         {
             try
             {
                 var playerId = args.Value.PlayerId;
-                _mainThreadActions.Enqueue(() => ProcessPing(playerId));
+                ProcessPing(playerId);
             }
             catch (Exception ex)
             {
                 PubSubLog.Error(ex, "OnPing failed");
             }
-
-            return Task.CompletedTask;
         }
 
-        private Task OnStatus(Data<PlayerOnlineStatusMsg> args)
+        private void OnStatus(Data<PlayerOnlineStatusMsg> args)
         {
             try
             {
                 var msg = args.Value;
-                _mainThreadActions.Enqueue(() => ProcessStatus(msg));
+                ProcessStatus(msg);
             }
             catch (Exception ex)
             {
                 PubSubLog.Error(ex, "OnStatus failed");
             }
-
-            return Task.CompletedTask;
         }
 
         private void OnClientMsg(Data<ClientMirrorMessage> args)
@@ -231,33 +229,41 @@ namespace PubSubLib
             try
             {
                 var msg = args.Value;
-                _mainThreadActions.Enqueue(() =>
-                {
-                    try
-                    {
-                        if (!_data.TryGetValue(msg.PlayerId, out var playerData))
-                            return;
-                        if (!playerData.TryGetValue(msg.DataName, out var dataObj))
-                            return;
-                        if (dataObj is not IPlayerDataInternal di)
-                            return;
 
-                        if (msg.Subject == "__player_speaks_init__")
-                        {
-                            dataObj.Commit("init");
-                        }
-                        else
-                        {
-                            var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
-                            foreach (var a in actions)
-                                _mainThreadActions.Enqueue(a);
-                        }
-                    }
-                    catch (Exception ex)
+
+                try
+                {
+                    if (!_data.TryGetValue(msg.PlayerId, out var playerData))
+                        return;
+                    if (!playerData.TryGetValue(msg.DataName, out var dataObj))
+                        return;
+                    if (dataObj is not IPlayerDataInternal di)
+                        return;
+
+                    if (msg.Subject == "__player_speaks_init__")
                     {
-                        PubSubLog.Error(ex, "OnClientMsg handler failed");
+                        dataObj.Commit("init");
                     }
-                });
+                    else
+                    {
+                        var actions = di.PrepareMessageDispatch(msg.Subject, msg.Data.ToByteArray());
+                        foreach (var a in actions)
+                        {
+                            try
+                            {
+                                a.Invoke();
+                            }
+                            catch (Exception ex)
+                            {
+                                PubSubLog.Error(ex, "Error on invoke action");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PubSubLog.Error(ex, "OnClientMsg handler failed");
+                }
             }
             catch (Exception ex)
             {
@@ -280,6 +286,7 @@ namespace PubSubLib
             }
 
             _playerTimers.Tick();
+            _natify.Tick();
         }
 
         private void ProcessPing(long playerId)
